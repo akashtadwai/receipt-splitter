@@ -1,0 +1,46 @@
+# Python-related ignores (backend)
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+env/
+*.env
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.log
+instance/
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# JavaScript/React-related ignores (frontend)
+node_modules/
+/build
+/dist
+.DS_Store
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# Database files
+*.sqlite
+*.db
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*.swo
