@@ -16,7 +16,6 @@ services:
   - type: web
     name: receipt-splitter-frontend
     runtime: static
-    plan: free
     buildCommand: cd receipt-splitter-frontend && npm install && npm run build
     staticPublishPath: ./receipt-splitter-frontend/build
     envVars:
