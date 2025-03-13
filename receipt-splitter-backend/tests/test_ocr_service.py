@@ -3,88 +3,140 @@ from unittest.mock import patch, MagicMock
 import json
 import base64
 from pathlib import Path
-
 from fastapi import HTTPException
 from app.services.ocr_service import (
-    process_image_ocr,
-    validate_receipt,
-    parse_ocr_to_structured_data,
-    format_structured_response
+    structured_ocr,
+    process_with_vision_model
 )
 
-# Mock base64 image data
-MOCK_IMAGE_DATA = b"test image data"
-MOCK_BASE64_URL = "data:image/jpeg;base64," + base64.b64encode(MOCK_IMAGE_DATA).decode()
-
-@pytest.mark.asyncio
-@patch("app.services.ocr_service.client")
-async def test_process_image_ocr(mock_client):
-    # Mock the Mistral client response
-    mock_response = MagicMock()
-    mock_response.pages = [MagicMock(markdown="Test OCR Markdown")]
-    mock_client.ocr.process.return_value = mock_response
+class TestOCRService:
+    """Test suite for OCR service functions"""
     
-    # Call the function
-    result = await process_image_ocr(MOCK_BASE64_URL)
+    # Mock base64 image data
+    MOCK_IMAGE_DATA = b"test image data"
+    MOCK_BASE64_URL = "data:image/jpeg;base64," + base64.b64encode(MOCK_IMAGE_DATA).decode()
     
-    # Verify the result
-    assert result == "Test OCR Markdown"
-    mock_client.ocr.process.assert_called_once()
-
-@pytest.mark.asyncio
-@patch("app.services.ocr_service.client")
-async def test_validate_receipt_true(mock_client):
-    # Mock a positive response from the Mistral client
-    mock_response = MagicMock()
-    mock_message = MagicMock()
-    mock_message.content = "YES"
-    mock_response.choices = [MagicMock(message=mock_message)]
-    mock_client.chat.complete.return_value = mock_response
+    @pytest.mark.asyncio
+    @patch("app.services.ocr_service.client")
+    async def test_process_with_vision_model_success(self, mock_client):
+        """Test successful processing of an image with the vision model"""
+        # Arrange
+        mock_response = MagicMock()
+        mock_parsed_message = MagicMock()
+        mock_parsed_message.json.return_value = json.dumps({
+            "is_receipt": True,
+            "topics": ["Receipt"],
+            "languages": ["English"],
+            "ocr_contents": {
+                "items": [
+                    {"name": "Item1", "price": 10.0}
+                ],
+                "total_order_bill_details": {"total_bill": 10.0, "taxes": []}
+            }
+        })
+        mock_client.chat.parse.return_value = MagicMock(
+            choices=[MagicMock(message=MagicMock(parsed=mock_parsed_message))]
+        )
+        
+        # Act
+        result = await process_with_vision_model(self.MOCK_BASE64_URL, "test.jpg")
+        
+        # Assert
+        assert "file_name" in result
+        assert "topics" in result
+        assert "languages" in result
+        assert "ocr_contents" in result
+        assert "items" in result["ocr_contents"]
+        assert "total_order_bill_details" in result["ocr_contents"]
+        assert result["file_name"] == "test"
+        mock_client.chat.parse.assert_called_once()
     
-    # Call the function with receipt-like OCR text
-    result = await validate_receipt("Item1 $10.00\nItem2 $20.00\nTotal $30.00")
+    @pytest.mark.asyncio
+    @patch("app.services.ocr_service.client")
+    async def test_process_with_vision_model_not_receipt(self, mock_client):
+        """Test handling of non-receipt images"""
+        # Arrange
+        mock_response = MagicMock()
+        mock_parsed_message = MagicMock()
+        mock_parsed_message.json.return_value = json.dumps({
+            "is_receipt": False,
+            "reason": "The image does not appear to be a receipt",
+            "topics": ["Document"],
+            "languages": ["English"],
+            "ocr_contents": {}
+        })
+        mock_client.chat.parse.return_value = MagicMock(
+            choices=[MagicMock(message=MagicMock(parsed=mock_parsed_message))]
+        )
+        
+        # Act/Assert
+        with pytest.raises(HTTPException) as exc_info:
+            await process_with_vision_model(self.MOCK_BASE64_URL, "test.jpg")
+        
+        assert exc_info.value.status_code == 400
+        assert "The image does not appear to be a receipt" in str(exc_info.value.detail)
+        mock_client.chat.parse.assert_called_once()
     
-    # Verify the result
-    assert result is True
-    mock_client.chat.complete.assert_called_once()
-
-@pytest.mark.asyncio
-@patch("app.services.ocr_service.client")
-async def test_validate_receipt_false(mock_client):
-    # Mock a negative response from the Mistral client
-    mock_response = MagicMock()
-    mock_message = MagicMock()
-    mock_message.content = "NO"
-    mock_response.choices = [MagicMock(message=mock_message)]
-    mock_client.chat.complete.return_value = mock_response
+    @pytest.mark.asyncio
+    @patch("app.services.ocr_service.client")
+    @patch("app.services.ocr_service.time.sleep")
+    async def test_process_with_vision_model_retry_logic(self, mock_sleep, mock_client):
+        """Test retry logic when API rate limits are hit"""
+        # Arrange
+        import httpx
+        error_response = httpx.RemoteProtocolError("Rate limit exceeded", request=MagicMock())
+        error_response.status_code = 429
+        
+        success_response = MagicMock()
+        mock_parsed_message = MagicMock()
+        mock_parsed_message.json.return_value = json.dumps({
+            "is_receipt": True,
+            "topics": ["Receipt"],
+            "languages": ["English"],
+            "ocr_contents": {
+                "items": [],
+                "total_order_bill_details": {"total_bill": 0.0, "taxes": []}
+            }
+        })
+        
+        # Setup mock to fail twice then succeed
+        mock_client.chat.parse.side_effect = [
+            error_response,
+            error_response,
+            MagicMock(choices=[MagicMock(message=MagicMock(parsed=mock_parsed_message))])
+        ]
+        
+        # Act
+        result = await process_with_vision_model(self.MOCK_BASE64_URL, "test.jpg")
+        
+        # Assert
+        assert mock_client.chat.parse.call_count == 3
+        assert mock_sleep.call_count == 2
+        assert result["file_name"] == "test"
     
-    # Call the function with non-receipt OCR text
-    result = await validate_receipt("This is just some random text")
-    
-    # Verify the result
-    assert result is False
-    mock_client.chat.complete.assert_called_once()
-
-def test_format_structured_response():
-    # Test with already formatted response
-    formatted_response = {
-        "file_name": "already_formatted",
-        "topics": ["Receipt"],
-        "languages": ["English"],
-        "ocr_contents": {
-            "items": [{"name": "Item1", "price": 10.0}],
-            "total_order_bill_details": {"total_bill": 10.0}
+    @pytest.mark.asyncio
+    @patch("app.services.ocr_service.process_with_vision_model")
+    @patch("pathlib.Path.write_bytes")
+    @patch("pathlib.Path.exists")
+    @patch("pathlib.Path.unlink")
+    async def test_structured_ocr_file_handling(self, mock_unlink, mock_exists, mock_write, mock_process):
+        """Test temporary file handling during OCR processing"""
+        # Arrange
+        mock_process.return_value = {
+            "file_name": "test",
+            "topics": ["Receipt"],
+            "languages": ["English"],
+            "ocr_contents": {
+                "items": [],
+                "total_order_bill_details": {"total_bill": 0.0, "taxes": []}
+            }
         }
-    }
-    result = format_structured_response(formatted_response, "test.jpg")
-    assert result == formatted_response
-    
-    # Test with unformatted response
-    unformatted_response = {
-        "items": [{"name": "Item1", "price": 10.0}],
-        "total_order_bill_details": {"total_bill": 10.0}
-    }
-    result = format_structured_response(unformatted_response, "test.jpg")
-    assert result["file_name"] == "test"
-    assert "ocr_contents" in result
-    assert result["ocr_contents"]["items"] == unformatted_response["items"]
+        mock_exists.return_value = True
+        
+        # Act
+        await structured_ocr(self.MOCK_IMAGE_DATA, "test.jpg")
+        
+        # Assert - verify file is written and then cleaned up
+        mock_write.assert_called_once()
+        mock_exists.assert_called_once()
+        mock_unlink.assert_called_once()
