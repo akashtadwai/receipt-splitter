@@ -272,7 +272,17 @@ function App() {
   };
 
   const calculateSplit = async () => {
-    // Validate all custom amounts
+    // First, check if any item has no contributors
+    const itemsWithNoContributors = itemSplits
+      .map((item, index) => ({ item, index }))
+      .filter(({ item }) => Object.keys(item.contributors).length === 0);
+
+    if (itemsWithNoContributors.length > 0) {
+      setError(`"${itemsWithNoContributors[0].item.item_name}" has no contributors. At least one person must be selected for each item.`);
+      return;
+    }
+
+    // Then check for valid custom amounts (existing code)
     const invalidItems = itemSplits
       .map((item, index) => ({ item, index }))
       .filter(({ item, index }) => item.useCustomAmounts && !validateCustomAmounts(index));
