@@ -7,7 +7,6 @@ from typing import Dict, Any
 
 from fastapi import HTTPException
 from mistralai import Mistral, ImageURLChunk, TextChunk
-
 from app.config.settings import MISTRAL_API_KEY, MISTRAL_OCR_MODEL, MISTRAL_VISION_MODEL, MISTRAL_TEXT_MODEL
 from app.models.schemas import StructuredOCR
 
@@ -43,7 +42,7 @@ async def structured_ocr(image_data: bytes, filename: str) -> Dict[str, Any]:
         # Format the response
         formatted_response = format_structured_response(structured_data, filename)
         
-        return formatted_response
+        return process_formatted_response(formatted_response)
     finally:
         # Clean up the temporary file
         if temp_path.exists():
@@ -51,7 +50,7 @@ async def structured_ocr(image_data: bytes, filename: str) -> Dict[str, Any]:
 
 async def process_image_ocr(base64_data_url: str) -> str:
     """Process image with OCR and return markdown text"""
-    for attempt in range(3):  # Try up to 3 times
+    for attempt in range(5):  # Try up to 5 times
         try:
             image_response = client.ocr.process(
                 document=ImageURLChunk(image_url=base64_data_url),
@@ -59,8 +58,8 @@ async def process_image_ocr(base64_data_url: str) -> str:
             )
             return image_response.pages[0].markdown
         except httpx.RemoteProtocolError as e:
-            if attempt < 2 and hasattr(e, 'status_code') and e.status_code == 429:
-                wait_time = 2 ** attempt  # Exponential backoff
+            if attempt < 4 and hasattr(e, 'status_code') and e.status_code == 429:
+                wait_time = (2 ** attempt) * 3  # Exponential backoff
                 print(f"Rate limit exceeded, retrying in {wait_time} seconds...")
                 time.sleep(wait_time)
             else:
@@ -70,7 +69,7 @@ async def process_image_ocr(base64_data_url: str) -> str:
 
 async def validate_receipt(ocr_text: str) -> bool:
     """Validate if the OCR text is from a receipt"""
-    for attempt in range(3):
+    for attempt in range(5):
         try:
             validation = client.chat.complete(
                 model=MISTRAL_TEXT_MODEL,
@@ -84,8 +83,8 @@ async def validate_receipt(ocr_text: str) -> bool:
             response = validation.choices[0].message.content.strip().upper()
             return response == "YES"
         except httpx.RemoteProtocolError as e:
-            if attempt < 2 and hasattr(e, 'status_code') and e.status_code == 429:
-                wait_time = 2 ** attempt
+            if attempt < 5 and hasattr(e, 'status_code') and e.status_code == 429:
+                wait_time = (2 ** attempt) * 3  # Exponential backoff
                 print(f"Rate limit exceeded during validation, retrying in {wait_time} seconds...")
                 time.sleep(wait_time)
             else:
@@ -93,9 +92,86 @@ async def validate_receipt(ocr_text: str) -> bool:
     
     return False
 
+def process_formatted_response(response_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Process the raw OCR response and convert string prices to floats"""
+    # Initialize processed data with required fields
+    processed_data = {
+        "file_name": response_data.get("file_name", ""),
+        "topics": response_data.get("topics", ["Receipt", "Transaction"]),
+        "languages": response_data.get("languages", ["English"]),
+        "ocr_contents": {
+            "items": [],  # Initialize with empty array
+            "total_order_bill_details": {
+                "total_bill": 0.0,  # Initialize with default values
+                "taxes": []
+            }
+        }
+    }
+    
+    # Process existing ocr_contents if available
+    ocr_contents = response_data.get("ocr_contents", {})
+    
+    # Process items
+    items_source = ocr_contents.get("items", response_data.get("items", []))
+    if items_source:
+        processed_items = []
+        for item in items_source:
+            processed_item = {"name": item.get("name", "Unknown Item")}
+            price_str = str(item.get("price", "0")).replace("₹", "").replace(",", "").strip()
+            try:
+                processed_item["price"] = float(price_str)
+            except ValueError:
+                processed_item["price"] = 0.0
+            processed_items.append(processed_item)
+        processed_data["ocr_contents"]["items"] = processed_items
+    
+    # Find total_order_bill_details (handle case sensitivity and location variations)
+    bill_details = None
+    if "total_order_bill_details" in ocr_contents:
+        bill_details = ocr_contents["total_order_bill_details"]
+    elif "Total Order Bill Details" in response_data:
+        bill_details = response_data["Total Order Bill Details"]
+    elif "total_order_bill_details" in response_data:
+        bill_details = response_data["total_order_bill_details"]
+    
+    if bill_details:
+        processed_total = {"taxes": []}
+        
+        # Process total bill
+        bill_value = bill_details.get("total_bill", 0)
+        bill_str = str(bill_value).replace("₹", "").replace(",", "").strip()
+        try:
+            processed_total["total_bill"] = float(bill_str)
+        except ValueError:
+            processed_total["total_bill"] = 0.0
+            
+        # Process taxes
+        taxes = bill_details.get("taxes", [])
+        for tax in taxes:
+            name = tax.get("name", "Unknown Tax")
+            amount_str = str(tax.get("amount", "0")).replace("₹", "").strip()
+            
+            # Handle "+" and "-" prefixes
+            if amount_str.startswith("+ "):
+                amount_str = amount_str[2:]
+            elif amount_str.startswith("- "):
+                amount_str = "-" + amount_str[2:]
+            
+            try:
+                amount = float(amount_str)
+                processed_total["taxes"].append({"name": name, "amount": amount})
+            except ValueError:
+                pass
+        
+        processed_data["ocr_contents"]["total_order_bill_details"] = processed_total
+    
+    return processed_data
+
+
+
 async def parse_ocr_to_structured_data(base64_data_url: str, ocr_text: str) -> Dict[str, Any]:
     """Parse OCR text to structured JSON data"""
-    for attempt in range(3):
+    for attempt in range(5):
         try:
             chat_response = client.chat.parse(
                 model=MISTRAL_VISION_MODEL,
@@ -106,7 +182,7 @@ async def parse_ocr_to_structured_data(base64_data_url: str, ocr_text: str) -> D
                         TextChunk(text=(
                             "This is the image's OCR in markdown:\n"
                             f"<BEGIN_IMAGE_OCR>\n{ocr_text}\n<END_IMAGE_OCR>.\n"
-                            "Convert this into a structured JSON response and limit it to the following contents: It should always contain `items` field & `Total Order Bill Details` field."
+                            "Convert this into a structured JSON response and limit it to the following contents: It should always contain `items` field & `total_order_bill_details` field."
                             "items field should be a list of dict containing name and price"
                             "`Total Order Bill Details` should consist of total bill and taxes. Taxes shouldn't include labels that are marked as *Free*"
                             "If Delivery Free or Late Night Fee or Handling Fee is free it shouldn't be included in the taxes list."
@@ -116,10 +192,11 @@ async def parse_ocr_to_structured_data(base64_data_url: str, ocr_text: str) -> D
                 response_format=StructuredOCR,
                 temperature=0
             )
-            return json.loads(chat_response.choices[0].message.parsed.json())
+            raw_response = json.loads(chat_response.choices[0].message.parsed.json())
+            return raw_response
         except httpx.RemoteProtocolError as e:
-            if attempt < 2 and hasattr(e, 'status_code') and e.status_code == 429:
-                wait_time = 2 ** attempt
+            if attempt < 4 and hasattr(e, 'status_code') and e.status_code == 429:
+                wait_time = (2 ** attempt) * 3
                 print(f"Rate limit exceeded, retrying in {wait_time} seconds...")
                 time.sleep(wait_time)
             else:
