@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import './App.css';
 
 function App() {
+  const API_URL = process.env.REACT_APP_API_URL || '';
+  console.log("API_URL ",API_URL)
   const [receipt, setReceipt] = useState(null);
   const [persons, setPersons] = useState('');
   const [personsList, setPersonsList] = useState([]);
@@ -37,7 +39,7 @@ function App() {
     setError('');
     try {
       // Fetch mock data from backend
-      const response = await fetch('http://localhost:8000/mock-receipt');
+      const response = await fetch(`${API_URL}/mock-receipt`);
       if (!response.ok) {
         throw new Error('Failed to load demo data');
       }
@@ -94,7 +96,7 @@ function App() {
       const formData = new FormData();
       formData.append('file', file);
       // Send to backend for OCR processing
-      const response = await fetch('http://localhost:8000/process-receipt', {
+      const response = await fetch(`${API_URL}/process-receipt`, {
         method: 'POST',
         body: formData
       });
@@ -408,7 +410,7 @@ function App() {
         receipt_total: calculatedTotal
       };
 
-      const response = await fetch('http://localhost:8000/calculate-split', {
+      const response = await fetch(`${API_URL}/calculate-split`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

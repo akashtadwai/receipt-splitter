@@ -1,0 +1,31 @@
+services:
+  # Backend API service
+  - type: web
+    name: receipt-splitter-backend
+    runtime: python
+    plan: free
+    buildCommand: cd receipt-splitter-backend && pip install -r requirements.txt
+    startCommand: cd receipt-splitter-backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: MISTRAL_API_KEY
+        sync: false
+      - key: PYTHONPATH
+        value: .
+
+  # Frontend static site
+  - type: web
+    name: receipt-splitter-frontend
+    runtime: static
+    plan: free
+    buildCommand: cd receipt-splitter-frontend && npm install && npm run build
+    staticPublishPath: ./receipt-splitter-frontend/build
+    envVars:
+      - key: REACT_APP_API_URL
+        fromService:
+          name: receipt-splitter-backend
+          type: web
+          property: url
+    headers:
+      - path: /*
+        name: Cache-Control
+        value: no-cache
