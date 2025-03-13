@@ -24,7 +24,7 @@ services:
         fromService:
           name: receipt-splitter-backend
           type: web
-          property: url
+          envVarKey: RENDER_EXTERNAL_URL
     headers:
       - path: /*
         name: Cache-Control
