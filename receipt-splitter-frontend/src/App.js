@@ -794,12 +794,8 @@ function App() {
                           <h3 className="font-semibold text-indigo-900">{item.item_name}</h3>
                           <p className="text-indigo-800 font-medium">₹{item.price.toFixed(2)}</p>
                         </div>
-                        <div className="flex justify-between items-center mb-2">
-                          <h3 className="font-semibold text-indigo-900">{item.item_name}</h3>
-                          <p className="text-indigo-800 font-medium">₹{item.price.toFixed(2)}</p>
-                        </div>
 
-                        {/* Add this toggle button */}
+                        {/* Toggle All Button */}
                         <button
                           onClick={() => toggleAllContributors(itemIndex)}
                           className="mb-3 text-xs bg-indigo-100 text-indigo-800 px-2 py-1 rounded hover:bg-indigo-200"
@@ -895,12 +891,8 @@ function App() {
                           <h3 className="font-semibold text-amber-900">{item.item_name}</h3>
                           <p className="text-amber-800 font-medium">₹{item.price.toFixed(2)}</p>
                         </div>
-                        <div className="flex justify-between items-center mb-2">
-                          <h3 className="font-semibold text-amber-900">{item.item_name}</h3>
-                          <p className="text-amber-800 font-medium">₹{item.price.toFixed(2)}</p>
-                        </div>
 
-                        {/* Add this toggle button */}
+                        {/* Toggle All Button */}
                         <button
                           onClick={() => toggleAllContributors(itemIndex)}
                           className="mb-3 text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded hover:bg-amber-200"
@@ -909,7 +901,6 @@ function App() {
                             ? "Deselect All"
                             : "Select All"}
                         </button>
-
 
                         <div className="flex items-center mb-3">
                           <label className="flex items-center text-amber-800">
@@ -997,12 +988,8 @@ function App() {
                           <h3 className="font-semibold text-green-900">{item.item_name}</h3>
                           <p className="text-green-800 font-medium">₹{item.price.toFixed(2)}</p>
                         </div>
-                        <div className="flex justify-between items-center mb-2">
-                          <h3 className="font-semibold text-green-900">{item.item_name}</h3>
-                          <p className="text-green-800 font-medium">₹{item.price.toFixed(2)}</p>
-                        </div>
 
-                        {/* Add this toggle button */}
+                        {/* Toggle All Button */}
                         <button
                           onClick={() => toggleAllContributors(itemIndex)}
                           className="mb-3 text-xs bg-green-100 text-green-800 px-2 py-1 rounded hover:bg-green-200"
