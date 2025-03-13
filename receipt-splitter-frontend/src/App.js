@@ -12,6 +12,9 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [imagePreview, setImagePreview] = useState(null);
+  // New state for price editing
+  const [editingPrices, setEditingPrices] = useState(false);
+  const [editedItems, setEditedItems] = useState([]);
 
   const handleFileChange = (e) => {
     if (e.target.files.length > 0) {
@@ -38,6 +41,9 @@ function App() {
 
       // Set demo image preview
       setImagePreview('/images/demo-receipt.jpeg');
+
+      // Initialize edited items with the OCR results
+      setEditedItems(data.ocr_contents.items.map(item => ({ ...item })));
 
       // Initialize item splits with regular items
       const initialSplits = data.ocr_contents.items.map(item => ({
@@ -92,6 +98,9 @@ function App() {
       const data = await response.json();
       setReceipt(data);
 
+      // Initialize edited items with the OCR results
+      setEditedItems(data.ocr_contents.items.map(item => ({ ...item })));
+
       // Initialize item splits
       const initialSplits = data.ocr_contents.items.map(item => ({
         item_name: item.name,
@@ -133,16 +142,33 @@ function App() {
       return;
     }
     setPersonsList(newPersonsList);
+
+    // Use edited prices if in editing mode
+    const itemsToUse = editingPrices ? editedItems : receipt.ocr_contents.items;
+
     // Initialize all persons as contributors to each item (including taxes)
-    const updatedSplits = itemSplits.map(item => ({
-      ...item,
-      contributors: Object.fromEntries(
-        newPersonsList.map(person => [
-          person,
-          item.useCustomAmounts ? 0 : item.price / newPersonsList.length
-        ])
-      )
-    }));
+    const updatedSplits = itemSplits.map(item => {
+      // Find the corresponding edited item if it's a regular item
+      let price = item.price;
+      if (item.isItem && editingPrices) {
+        const editedItem = itemsToUse.find(i => i.name === item.item_name);
+        if (editedItem) {
+          price = editedItem.price;
+        }
+      }
+
+      return {
+        ...item,
+        price, // Use potentially updated price
+        contributors: Object.fromEntries(
+          newPersonsList.map(person => [
+            person,
+            item.useCustomAmounts ? 0 : price / newPersonsList.length
+          ])
+        )
+      };
+    });
+
     setItemSplits(updatedSplits);
     setStep(3);
   };
@@ -190,7 +216,6 @@ function App() {
     setItemSplits(updatedSplits);
   };
 
-
   const toggleCustomAmounts = (itemIndex) => {
     const updatedSplits = [...itemSplits];
     const item = updatedSplits[itemIndex];
@@ -223,6 +248,16 @@ function App() {
     setItemSplits(updatedSplits);
   };
 
+  // New function to handle price editing
+  const handlePriceChange = (index, newPrice) => {
+    const updatedItems = [...editedItems];
+    if (newPrice === '') {
+      updatedItems[index].price = '';
+    } else {
+      updatedItems[index].price = parseFloat(newPrice) || 0;
+    }
+    setEditedItems(updatedItems);
+  };
 
   const validateCustomAmounts = (itemIndex) => {
     const item = itemSplits[itemIndex];
@@ -235,7 +270,6 @@ function App() {
       }, 0);
     return Math.abs(total - item.price) < 0.01; // Allow for small rounding errors
   };
-
 
   const calculateSplit = async () => {
     // Validate all custom amounts
@@ -252,6 +286,11 @@ function App() {
     setError('');
 
     try {
+      // Calculate the total based on edited values if in edit mode
+      const calculatedTotal = editingPrices
+        ? editedItems.reduce((sum, item) => sum + (parseFloat(item.price) || 0), 0)
+        : receipt.ocr_contents.total_order_bill_details.total_bill;
+
       const requestData = {
         items: itemSplits.map(({ item_name, price, contributors }) => ({
           item_name,
@@ -259,8 +298,8 @@ function App() {
           contributors
         })),
         persons: personsList,
-        // Include the total bill from OCR results
-        receipt_total: receipt.ocr_contents.total_order_bill_details.total_bill
+        // Include the total bill, using edited values if in edit mode
+        receipt_total: calculatedTotal
       };
 
       const response = await fetch('http://localhost:8000/calculate-split', {
@@ -300,6 +339,8 @@ function App() {
     setFile(null);
     setImagePreview(null);
     setError('');
+    setEditingPrices(false);
+    setEditedItems([]);
   };
 
   // Navigation functions for back/forward
@@ -402,12 +443,34 @@ function App() {
 
               {/* Extracted items and taxes column */}
               <div className="w-full md:w-1/2">
-                <h3 className="text-lg font-semibold mb-2 text-indigo-700">Extracted Items</h3>
+                <div className="flex justify-between items-center mb-2">
+                  <h3 className="text-lg font-semibold text-indigo-700">Extracted Items</h3>
+                  <button
+                    onClick={() => setEditingPrices(!editingPrices)}
+                    className={`text-sm px-3 py-1 rounded font-medium ${editingPrices
+                        ? 'bg-amber-100 text-amber-800 hover:bg-amber-200'
+                        : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'
+                      }`}
+                  >
+                    {editingPrices ? 'Remove Edits' : 'Edit Prices'}
+                  </button>
+                </div>
+
                 <div className="space-y-2">
-                  {receipt.ocr_contents.items.map((item, index) => (
-                    <div key={index} className="p-3 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors">
+                  {editedItems.map((item, index) => (
+                    <div key={index} className="p-3 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors flex justify-between items-center">
                       <p className="font-medium text-indigo-900">{item.name}</p>
-                      <p className="text-right text-indigo-800">₹{item.price.toFixed(2)}</p>
+                      {editingPrices ? (
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={item.price}
+                          onChange={(e) => handlePriceChange(index, e.target.value)}
+                          className="w-24 p-1 text-right border border-amber-300 rounded focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                        />
+                      ) : (
+                        <p className="text-right text-indigo-800">₹{item.price.toFixed(2)}</p>
+                      )}
                     </div>
                   ))}
 
@@ -428,10 +491,23 @@ function App() {
                   <div className="p-3 bg-indigo-200 rounded-lg">
                     <p className="font-bold text-indigo-900">Total</p>
                     <p className="text-right font-bold text-indigo-900">
-                      ₹{receipt.ocr_contents.total_order_bill_details.total_bill.toFixed(2)}
+                      {editingPrices ? (
+                        "₹" + editedItems.reduce((sum, item) => {
+                          const price = item.price === '' ? 0 : parseFloat(item.price) || 0;
+                          return sum + price;
+                        }, 0).toFixed(2)
+                      ) : (
+                        "₹" + receipt.ocr_contents.total_order_bill_details.total_bill.toFixed(2)
+                      )}
                     </p>
                   </div>
                 </div>
+
+                {editingPrices && (
+                  <div className="mt-3 p-2 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+                    <p>✏️ Edit the prices above to correct any OCR errors before proceeding.</p>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -459,6 +535,14 @@ function App() {
                   Continue
                 </button>
               </div>
+
+              {editingPrices && editedItems.some((item, i) =>
+                item.price !== receipt.ocr_contents.items[i].price ||
+                (item.price === '' && receipt.ocr_contents.items[i].price !== 0)) && (
+                  <p className="mt-2 text-amber-600 text-sm">
+                    ⚠️ You've edited prices. Make sure your total looks correct before continuing.
+                  </p>
+                )}
             </div>
           </div>
         )}
@@ -530,7 +614,6 @@ function App() {
                               <span className={`font-medium ${validateCustomAmounts(itemIndex) ? 'text-green-600' : 'text-red-600'}`}>
                                 ₹{Object.values(item.contributors)
                                   .reduce((sum, amount) => {
-                                    // Convert empty strings or non-numeric values to 0
                                     const numAmount = amount === '' ? 0 : parseFloat(amount) || 0;
                                     return sum + numAmount;
                                   }, 0)
@@ -552,8 +635,6 @@ function App() {
                             )}
                           </div>
                         )}
-
-
                       </div>
                     );
                   })}
@@ -614,12 +695,31 @@ function App() {
                         </div>
 
                         {item.useCustomAmounts && (
-                          <div className="mt-2 flex justify-between text-sm">
-                            <span className="text-amber-800">Total assigned:</span>
-                            <span className={`font-medium ${validateCustomAmounts(itemIndex) ? 'text-green-600' : 'text-red-600'}`}>
-                              ₹{Object.values(item.contributors).reduce((sum, amount) => sum + amount, 0).toFixed(2)}
-                              {!validateCustomAmounts(itemIndex) && ` / ₹${item.price.toFixed(2)}`}
-                            </span>
+                          <div className="mt-2 space-y-1">
+                            <div className="flex justify-between text-sm">
+                              <span className="text-amber-800">Total assigned:</span>
+                              <span className={`font-medium ${validateCustomAmounts(itemIndex) ? 'text-green-600' : 'text-red-600'}`}>
+                                ₹{Object.values(item.contributors)
+                                  .reduce((sum, amount) => {
+                                    const numAmount = amount === '' ? 0 : parseFloat(amount) || 0;
+                                    return sum + numAmount;
+                                  }, 0)
+                                  .toFixed(2)} / ₹{item.price.toFixed(2)}
+                              </span>
+                            </div>
+                            {!validateCustomAmounts(itemIndex) && (
+                              <div className="flex justify-between text-sm">
+                                <span className="text-amber-800">Remaining to allocate:</span>
+                                <span className="font-medium text-amber-600">
+                                  ₹{(item.price - Object.values(item.contributors)
+                                    .reduce((sum, amount) => {
+                                      const numAmount = amount === '' ? 0 : parseFloat(amount) || 0;
+                                      return sum + numAmount;
+                                    }, 0))
+                                    .toFixed(2)}
+                                </span>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
@@ -659,8 +759,6 @@ function App() {
                 </div>
               ))}
             </div>
-
-            {/* Removed the "Extra amount" and "Extra per person" section as requested */}
 
             <div className="flex justify-between mt-6">
               <button

@@ -42,7 +42,7 @@ async def structured_ocr(image_data: bytes, filename: str) -> Dict[str, Any]:
         # Format the response
         formatted_response = format_structured_response(structured_data, filename)
         
-        return process_formatted_response(formatted_response)
+        return formatted_response
     finally:
         # Clean up the temporary file
         if temp_path.exists():
@@ -92,83 +92,6 @@ async def validate_receipt(ocr_text: str) -> bool:
     
     return False
 
-def process_formatted_response(response_data: Dict[str, Any]) -> Dict[str, Any]:
-    """Process the raw OCR response and convert string prices to floats"""
-    # Initialize processed data with required fields
-    processed_data = {
-        "file_name": response_data.get("file_name", ""),
-        "topics": response_data.get("topics", ["Receipt", "Transaction"]),
-        "languages": response_data.get("languages", ["English"]),
-        "ocr_contents": {
-            "items": [],  # Initialize with empty array
-            "total_order_bill_details": {
-                "total_bill": 0.0,  # Initialize with default values
-                "taxes": []
-            }
-        }
-    }
-    
-    # Process existing ocr_contents if available
-    ocr_contents = response_data.get("ocr_contents", {})
-    
-    # Process items
-    items_source = ocr_contents.get("items", response_data.get("items", []))
-    if items_source:
-        processed_items = []
-        for item in items_source:
-            processed_item = {"name": item.get("name", "Unknown Item")}
-            price_str = str(item.get("price", "0")).replace("₹", "").replace(",", "").strip()
-            try:
-                processed_item["price"] = float(price_str)
-            except ValueError:
-                processed_item["price"] = 0.0
-            processed_items.append(processed_item)
-        processed_data["ocr_contents"]["items"] = processed_items
-    
-    # Find total_order_bill_details (handle case sensitivity and location variations)
-    bill_details = None
-    if "total_order_bill_details" in ocr_contents:
-        bill_details = ocr_contents["total_order_bill_details"]
-    elif "Total Order Bill Details" in response_data:
-        bill_details = response_data["Total Order Bill Details"]
-    elif "total_order_bill_details" in response_data:
-        bill_details = response_data["total_order_bill_details"]
-    
-    if bill_details:
-        processed_total = {"taxes": []}
-        
-        # Process total bill
-        bill_value = bill_details.get("total_bill", 0)
-        bill_str = str(bill_value).replace("₹", "").replace(",", "").strip()
-        try:
-            processed_total["total_bill"] = float(bill_str)
-        except ValueError:
-            processed_total["total_bill"] = 0.0
-            
-        # Process taxes
-        taxes = bill_details.get("taxes", [])
-        for tax in taxes:
-            name = tax.get("name", "Unknown Tax")
-            amount_str = str(tax.get("amount", "0")).replace("₹", "").strip()
-            
-            # Handle "+" and "-" prefixes
-            if amount_str.startswith("+ "):
-                amount_str = amount_str[2:]
-            elif amount_str.startswith("- "):
-                amount_str = "-" + amount_str[2:]
-            
-            try:
-                amount = float(amount_str)
-                processed_total["taxes"].append({"name": name, "amount": amount})
-            except ValueError:
-                pass
-        
-        processed_data["ocr_contents"]["total_order_bill_details"] = processed_total
-    
-    return processed_data
-
-
-
 async def parse_ocr_to_structured_data(base64_data_url: str, ocr_text: str) -> Dict[str, Any]:
     """Parse OCR text to structured JSON data"""
     for attempt in range(5):
@@ -181,11 +104,19 @@ async def parse_ocr_to_structured_data(base64_data_url: str, ocr_text: str) -> D
                         ImageURLChunk(image_url=base64_data_url),
                         TextChunk(text=(
                             "This is the image's OCR in markdown:\n"
-                            f"<BEGIN_IMAGE_OCR>\n{ocr_text}\n<END_IMAGE_OCR>.\n"
-                            "Convert this into a structured JSON response and limit it to the following contents: It should always contain `items` field & `total_order_bill_details` field."
-                            "items field should be a list of dict containing name and price"
-                            "`Total Order Bill Details` should consist of total bill and taxes. Taxes shouldn't include labels that are marked as *Free*"
-                            "If Delivery Free or Late Night Fee or Handling Fee is free it shouldn't be included in the taxes list."
+                            f"\n{ocr_text}\n.\n"
+                            "Convert this into a structured JSON with EXACTLY these requirements:\n"
+                            "1. The response must contain exactly these fields with exact naming:\n"
+                            "   - 'items': An array of objects\n" 
+                            "   - 'total_order_bill_details': An object\n"
+                            "2. Each item in 'items' must have:\n"
+                            "   - 'name': String with the item name\n"
+                            "   - 'price': Numeric value WITHOUT any currency symbol (₹)\n"
+                            "3. The 'total_order_bill_details' must have:\n"
+                            "   - 'total_bill': Numeric value WITHOUT any currency symbol\n"
+                            "   - 'taxes': Array of objects with 'name' (string) and 'amount' (numeric)\n"
+                            "4. ALL monetary values must be plain numbers - NO currency symbols\n"
+                            "5. Handle + and - correctly (e.g., discount of 45 should be -45.0)\n"
                         ))
                     ],
                 }],
