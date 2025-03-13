@@ -23,6 +23,52 @@ function App() {
     }
   };
 
+  const loadDemoData = async () => {
+    setIsLoading(true);
+    setError('');
+    try {
+      // Fetch mock data from backend
+      const response = await fetch('http://localhost:8000/mock-receipt');
+      if (!response.ok) {
+        throw new Error('Failed to load demo data');
+      }
+
+      const data = await response.json();
+      setReceipt(data);
+
+      // Set demo image preview
+      setImagePreview('/images/demo-receipt.jpeg');
+
+      // Initialize item splits with regular items
+      const initialSplits = data.ocr_contents.items.map(item => ({
+        item_name: item.name,
+        price: item.price,
+        contributors: {},
+        useCustomAmounts: false,
+        isItem: true
+      }));
+
+      // Add tax items to splits if they exist
+      const taxSplits = data.ocr_contents.total_order_bill_details.taxes
+        ? data.ocr_contents.total_order_bill_details.taxes.map(tax => ({
+          item_name: `${tax.name} (Tax/Fee)`,
+          price: tax.amount,
+          contributors: {},
+          useCustomAmounts: false,
+          isTax: true
+        }))
+        : [];
+
+      // Combine regular items and taxes
+      setItemSplits([...initialSplits, ...taxSplits]);
+      setStep(2);
+    } catch (err) {
+      setError('Error loading demo: ' + err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const uploadReceipt = async () => {
     if (!file) {
       setError('Please select a file first');
@@ -45,14 +91,29 @@ function App() {
       }
       const data = await response.json();
       setReceipt(data);
+
       // Initialize item splits
       const initialSplits = data.ocr_contents.items.map(item => ({
         item_name: item.name,
         price: item.price,
         contributors: {},
-        useCustomAmounts: false
+        useCustomAmounts: false,
+        isItem: true // Flag to identify regular items
       }));
-      setItemSplits(initialSplits);
+
+      // Add tax items to splits if they exist
+      const taxSplits = data.ocr_contents.total_order_bill_details.taxes
+        ? data.ocr_contents.total_order_bill_details.taxes.map(tax => ({
+          item_name: `${tax.name} (Tax/Fee)`,
+          price: tax.amount,
+          contributors: {},
+          useCustomAmounts: false,
+          isTax: true // Flag to identify tax items
+        }))
+        : [];
+
+      // Combine regular items and taxes
+      setItemSplits([...initialSplits, ...taxSplits]);
       setStep(2);
     } catch (err) {
       setError('Error processing receipt: ' + err.message);
@@ -72,7 +133,7 @@ function App() {
       return;
     }
     setPersonsList(newPersonsList);
-    // Initialize all persons as contributors to each item
+    // Initialize all persons as contributors to each item (including taxes)
     const updatedSplits = itemSplits.map(item => ({
       ...item,
       contributors: Object.fromEntries(
@@ -94,6 +155,15 @@ function App() {
       if (newContributors[person]) {
         // Remove person from contributors
         delete newContributors[person];
+
+        // Add this block to recalculate shares after removing a person
+        const remainingContributors = Object.keys(newContributors).length;
+        if (remainingContributors > 0) {
+          const newShare = item.price / remainingContributors;
+          Object.keys(newContributors).forEach(p => {
+            newContributors[p] = newShare;
+          });
+        }
       } else {
         // Add person to contributors
         const contributorCount = Object.keys(newContributors).length + 1;
@@ -120,6 +190,7 @@ function App() {
     setItemSplits(updatedSplits);
   };
 
+
   const toggleCustomAmounts = (itemIndex) => {
     const updatedSplits = [...itemSplits];
     const item = updatedSplits[itemIndex];
@@ -143,16 +214,28 @@ function App() {
 
   const handleCustomAmountChange = (itemIndex, person, amount) => {
     const updatedSplits = [...itemSplits];
-    updatedSplits[itemIndex].contributors[person] = parseFloat(amount) || 0;
+    // Allow empty string during editing
+    if (amount === '') {
+      updatedSplits[itemIndex].contributors[person] = '';
+    } else {
+      updatedSplits[itemIndex].contributors[person] = parseFloat(amount) || 0;
+    }
     setItemSplits(updatedSplits);
   };
+
 
   const validateCustomAmounts = (itemIndex) => {
     const item = itemSplits[itemIndex];
     if (!item.useCustomAmounts) return true;
-    const total = Object.values(item.contributors).reduce((sum, amount) => sum + amount, 0);
+    const total = Object.values(item.contributors)
+      .reduce((sum, amount) => {
+        // Convert empty strings or non-numeric values to 0
+        const numAmount = amount === '' ? 0 : parseFloat(amount) || 0;
+        return sum + numAmount;
+      }, 0);
     return Math.abs(total - item.price) < 0.01; // Allow for small rounding errors
   };
+
 
   const calculateSplit = async () => {
     // Validate all custom amounts
@@ -161,7 +244,7 @@ function App() {
       .filter(({ item, index }) => item.useCustomAmounts && !validateCustomAmounts(index));
 
     if (invalidItems.length > 0) {
-      setError(`Item "${invalidItems[0].item.item_name}" has invalid split amounts. Total must equal ${invalidItems[0].item.price.toFixed(2)}`);
+      setError(`"${invalidItems[0].item.item_name}" has invalid split amounts. Total must equal ${invalidItems[0].item.price.toFixed(2)}`);
       return;
     }
 
@@ -219,6 +302,14 @@ function App() {
     setError('');
   };
 
+  // Navigation functions for back/forward
+  const goToStep = (targetStep) => {
+    if (targetStep >= 1 && targetStep <= 4) {
+      setStep(targetStep);
+      setError('');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 p-4 md:p-8">
       <div className="max-w-4xl mx-auto bg-white rounded-xl shadow-lg p-6">
@@ -228,9 +319,12 @@ function App() {
         <div className="flex justify-center mb-8">
           {[1, 2, 3, 4].map((num) => (
             <div key={num} className="flex items-center">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${step === num ? 'bg-indigo-600 text-white' :
-                  step > num ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-600'
-                }`}>
+              <div
+                className={`w-10 h-10 rounded-full flex items-center justify-center font-bold cursor-pointer ${step === num ? 'bg-indigo-600 text-white' :
+                    step > num ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-600'
+                  }`}
+                onClick={() => num < step && goToStep(num)} // Only allow going back, not forward
+              >
                 {step > num ? '✓' : num}
               </div>
               {num < 4 && <div className={`h-1 w-10 ${step > num ? 'bg-green-500' : 'bg-gray-200'}`}></div>}
@@ -259,14 +353,30 @@ function App() {
                 </div>
               </label>
             </div>
-            <button
-              onClick={uploadReceipt}
-              disabled={!file || isLoading}
-              className={`w-full py-3 rounded-lg font-medium ${!file || isLoading ? 'bg-gray-300 text-gray-500' : 'bg-indigo-600 text-white hover:bg-indigo-700'
-                } transition-colors`}
-            >
-              {isLoading ? 'Processing...' : 'Process Receipt'}
-            </button>
+
+            <div className="flex flex-col md:flex-row gap-4">
+              <button
+                onClick={uploadReceipt}
+                disabled={!file || isLoading}
+                className={`flex-1 py-3 rounded-lg font-medium ${!file || isLoading ? 'bg-gray-300 text-gray-500' : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                  } transition-colors`}
+              >
+                {isLoading ? 'Processing...' : 'Process Receipt'}
+              </button>
+
+              {/* Demo Button */}
+              <button
+                onClick={loadDemoData}
+                disabled={isLoading}
+                className="flex-1 py-3 rounded-lg font-medium bg-emerald-600 text-white hover:bg-emerald-700 transition-colors"
+              >
+                Show Demo
+              </button>
+            </div>
+
+            <div className="text-sm text-center text-gray-500 mt-2">
+              <p>Demo uses sample data for an Instamart grocery order</p>
+            </div>
           </div>
         )}
 
@@ -290,7 +400,7 @@ function App() {
                 )}
               </div>
 
-              {/* Extracted items column */}
+              {/* Extracted items and taxes column */}
               <div className="w-full md:w-1/2">
                 <h3 className="text-lg font-semibold mb-2 text-indigo-700">Extracted Items</h3>
                 <div className="space-y-2">
@@ -300,6 +410,21 @@ function App() {
                       <p className="text-right text-indigo-800">₹{item.price.toFixed(2)}</p>
                     </div>
                   ))}
+
+                  {/* Display taxes section */}
+                  {receipt.ocr_contents.total_order_bill_details.taxes &&
+                    receipt.ocr_contents.total_order_bill_details.taxes.length > 0 && (
+                      <div className="mt-4">
+                        <h4 className="text-md font-semibold mb-2 text-amber-700">Taxes & Fees</h4>
+                        {receipt.ocr_contents.total_order_bill_details.taxes.map((tax, index) => (
+                          <div key={index} className="p-3 bg-amber-50 rounded-lg hover:bg-amber-100 transition-colors">
+                            <p className="font-medium text-amber-900">{tax.name}</p>
+                            <p className="text-right text-amber-800">₹{tax.amount.toFixed(2)}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
                   <div className="p-3 bg-indigo-200 rounded-lg">
                     <p className="font-bold text-indigo-900">Total</p>
                     <p className="text-right font-bold text-indigo-900">
@@ -317,15 +442,23 @@ function App() {
                 type="text"
                 value={persons}
                 onChange={(e) => setPersons(e.target.value)}
-                placeholder="e.g. John, Jane, Bob"
+                placeholder="e.g. Sachin, Rohit, Kohli"
                 className="w-full p-3 border border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
               />
-              <button
-                onClick={addPersons}
-                className="mt-3 bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 transition-colors font-medium"
-              >
-                Continue
-              </button>
+              <div className="flex justify-between mt-3">
+                <button
+                  onClick={() => goToStep(1)}
+                  className="bg-gray-200 text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+                >
+                  Back
+                </button>
+                <button
+                  onClick={addPersons}
+                  className="bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 transition-colors font-medium"
+                >
+                  Continue
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -334,75 +467,182 @@ function App() {
         {step === 3 && (
           <div className="space-y-6">
             <h2 className="text-xl font-bold text-indigo-800">Assign Contributors</h2>
-            <p className="text-indigo-600">Select who contributed to each item</p>
+            <p className="text-indigo-600">Select who contributed to each item and tax</p>
 
             <div className="space-y-6">
-              {itemSplits.map((item, itemIndex) => (
-                <div key={itemIndex} className="p-4 border border-indigo-200 rounded-lg bg-indigo-50">
-                  <div className="flex justify-between items-center mb-2">
-                    <h3 className="font-semibold text-indigo-900">{item.item_name}</h3>
-                    <p className="text-indigo-800 font-medium">₹{item.price.toFixed(2)}</p>
-                  </div>
+              {/* Regular items section */}
+              {itemSplits.filter(item => item.isItem).length > 0 && (
+                <div>
+                  <h3 className="text-lg font-semibold mb-2 text-indigo-700">Items</h3>
+                  {itemSplits.filter(item => item.isItem).map((item, originalIndex) => {
+                    const itemIndex = itemSplits.findIndex(i => i === item);
+                    return (
+                      <div key={itemIndex} className="p-4 border border-indigo-200 rounded-lg bg-indigo-50 mb-3">
+                        <div className="flex justify-between items-center mb-2">
+                          <h3 className="font-semibold text-indigo-900">{item.item_name}</h3>
+                          <p className="text-indigo-800 font-medium">₹{item.price.toFixed(2)}</p>
+                        </div>
 
-                  <div className="flex items-center mb-3">
-                    <label className="flex items-center text-indigo-800">
-                      <input
-                        type="checkbox"
-                        checked={item.useCustomAmounts}
-                        onChange={() => toggleCustomAmounts(itemIndex)}
-                        className="mr-2 h-4 w-4 text-indigo-600 border-indigo-300 rounded focus:ring-indigo-500"
-                      />
-                      Use custom amounts
-                    </label>
-                  </div>
+                        <div className="flex items-center mb-3">
+                          <label className="flex items-center text-indigo-800">
+                            <input
+                              type="checkbox"
+                              checked={item.useCustomAmounts}
+                              onChange={() => toggleCustomAmounts(itemIndex)}
+                              className="mr-2 h-4 w-4 text-indigo-600 border-indigo-300 rounded focus:ring-indigo-500"
+                            />
+                            Use custom amounts
+                          </label>
+                        </div>
 
-                  <div className="space-y-2">
-                    {personsList.map((person) => (
-                      <div key={person} className="flex items-center justify-between bg-white p-2 rounded-lg">
-                        <label className="flex items-center flex-1">
-                          <input
-                            type="checkbox"
-                            checked={item.contributors.hasOwnProperty(person)}
-                            onChange={() => toggleContributor(itemIndex, person)}
-                            className="mr-2 h-4 w-4 text-indigo-600 border-indigo-300 rounded focus:ring-indigo-500"
-                          />
-                          <span className="text-indigo-900">{person}</span>
-                        </label>
-                        {item.useCustomAmounts && item.contributors.hasOwnProperty(person) && (
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={item.contributors[person]}
-                            onChange={(e) => handleCustomAmountChange(itemIndex, person, e.target.value)}
-                            className="w-24 p-1 border border-indigo-200 rounded focus:ring-indigo-500 focus:border-indigo-500"
-                          />
+                        <div className="space-y-2">
+                          {personsList.map((person) => (
+                            <div key={person} className="flex items-center justify-between bg-white p-2 rounded-lg">
+                              <label className="flex items-center flex-1">
+                                <input
+                                  type="checkbox"
+                                  checked={item.contributors.hasOwnProperty(person)}
+                                  onChange={() => toggleContributor(itemIndex, person)}
+                                  className="mr-2 h-4 w-4 text-indigo-600 border-indigo-300 rounded focus:ring-indigo-500"
+                                />
+                                <span className="text-indigo-900">{person}</span>
+                              </label>
+                              {item.useCustomAmounts && item.contributors.hasOwnProperty(person) && (
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  value={item.contributors[person]}
+                                  onChange={(e) => handleCustomAmountChange(itemIndex, person, e.target.value)}
+                                  className="w-24 p-1 border border-indigo-200 rounded focus:ring-indigo-500 focus:border-indigo-500"
+                                />
+                              )}
+                              {!item.useCustomAmounts && item.contributors.hasOwnProperty(person) && (
+                                <span className="text-indigo-600">₹{item.contributors[person].toFixed(2)}</span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+
+                        {item.useCustomAmounts && (
+                          <div className="mt-2 space-y-1">
+                            <div className="flex justify-between text-sm">
+                              <span className="text-indigo-800">Total assigned:</span>
+                              <span className={`font-medium ${validateCustomAmounts(itemIndex) ? 'text-green-600' : 'text-red-600'}`}>
+                                ₹{Object.values(item.contributors)
+                                  .reduce((sum, amount) => {
+                                    // Convert empty strings or non-numeric values to 0
+                                    const numAmount = amount === '' ? 0 : parseFloat(amount) || 0;
+                                    return sum + numAmount;
+                                  }, 0)
+                                  .toFixed(2)} / ₹{item.price.toFixed(2)}
+                              </span>
+                            </div>
+                            {!validateCustomAmounts(itemIndex) && (
+                              <div className="flex justify-between text-sm">
+                                <span className="text-indigo-800">Remaining to allocate:</span>
+                                <span className="font-medium text-amber-600">
+                                  ₹{(item.price - Object.values(item.contributors)
+                                    .reduce((sum, amount) => {
+                                      const numAmount = amount === '' ? 0 : parseFloat(amount) || 0;
+                                      return sum + numAmount;
+                                    }, 0))
+                                    .toFixed(2)}
+                                </span>
+                              </div>
+                            )}
+                          </div>
                         )}
-                        {!item.useCustomAmounts && item.contributors.hasOwnProperty(person) && (
-                          <span className="text-indigo-600">₹{item.contributors[person].toFixed(2)}</span>
+
+
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Taxes section */}
+              {itemSplits.filter(item => item.isTax).length > 0 && (
+                <div>
+                  <h3 className="text-lg font-semibold mb-2 text-amber-700">Taxes & Fees</h3>
+                  {itemSplits.filter(item => item.isTax).map((item, originalIndex) => {
+                    const itemIndex = itemSplits.findIndex(i => i === item);
+                    return (
+                      <div key={itemIndex} className="p-4 border border-amber-200 rounded-lg bg-amber-50 mb-3">
+                        <div className="flex justify-between items-center mb-2">
+                          <h3 className="font-semibold text-amber-900">{item.item_name}</h3>
+                          <p className="text-amber-800 font-medium">₹{item.price.toFixed(2)}</p>
+                        </div>
+
+                        <div className="flex items-center mb-3">
+                          <label className="flex items-center text-amber-800">
+                            <input
+                              type="checkbox"
+                              checked={item.useCustomAmounts}
+                              onChange={() => toggleCustomAmounts(itemIndex)}
+                              className="mr-2 h-4 w-4 text-amber-600 border-amber-300 rounded focus:ring-amber-500"
+                            />
+                            Use custom amounts
+                          </label>
+                        </div>
+
+                        <div className="space-y-2">
+                          {personsList.map((person) => (
+                            <div key={person} className="flex items-center justify-between bg-white p-2 rounded-lg">
+                              <label className="flex items-center flex-1">
+                                <input
+                                  type="checkbox"
+                                  checked={item.contributors.hasOwnProperty(person)}
+                                  onChange={() => toggleContributor(itemIndex, person)}
+                                  className="mr-2 h-4 w-4 text-amber-600 border-amber-300 rounded focus:ring-amber-500"
+                                />
+                                <span className="text-amber-900">{person}</span>
+                              </label>
+                              {item.useCustomAmounts && item.contributors.hasOwnProperty(person) && (
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  value={item.contributors[person]}
+                                  onChange={(e) => handleCustomAmountChange(itemIndex, person, e.target.value)}
+                                  className="w-24 p-1 border border-amber-200 rounded focus:ring-amber-500 focus:border-amber-500"
+                                />
+                              )}
+                              {!item.useCustomAmounts && item.contributors.hasOwnProperty(person) && (
+                                <span className="text-amber-600">₹{item.contributors[person].toFixed(2)}</span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+
+                        {item.useCustomAmounts && (
+                          <div className="mt-2 flex justify-between text-sm">
+                            <span className="text-amber-800">Total assigned:</span>
+                            <span className={`font-medium ${validateCustomAmounts(itemIndex) ? 'text-green-600' : 'text-red-600'}`}>
+                              ₹{Object.values(item.contributors).reduce((sum, amount) => sum + amount, 0).toFixed(2)}
+                              {!validateCustomAmounts(itemIndex) && ` / ₹${item.price.toFixed(2)}`}
+                            </span>
+                          </div>
                         )}
                       </div>
-                    ))}
-                  </div>
-
-                  {item.useCustomAmounts && (
-                    <div className="mt-2 flex justify-between text-sm">
-                      <span className="text-indigo-800">Total assigned:</span>
-                      <span className={`font-medium ${validateCustomAmounts(itemIndex) ? 'text-green-600' : 'text-red-600'}`}>
-                        ₹{Object.values(item.contributors).reduce((sum, amount) => sum + amount, 0).toFixed(2)}
-                        {!validateCustomAmounts(itemIndex) && ` / ₹${item.price.toFixed(2)}`}
-                      </span>
-                    </div>
-                  )}
+                    );
+                  })}
                 </div>
-              ))}
+              )}
             </div>
 
-            <button
-              onClick={calculateSplit}
-              className="w-full py-3 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors"
-            >
-              Calculate Split
-            </button>
+            <div className="flex justify-between mt-6">
+              <button
+                onClick={() => goToStep(2)}
+                className="bg-gray-200 text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+              >
+                Back
+              </button>
+              <button
+                onClick={calculateSplit}
+                className="bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 transition-colors font-medium"
+              >
+                Calculate Split
+              </button>
+            </div>
           </div>
         )}
 
@@ -420,23 +660,22 @@ function App() {
               ))}
             </div>
 
-            <div className="mt-6 p-4 bg-indigo-50 rounded-lg border border-indigo-100">
-              <div className="flex justify-between mb-2">
-                <p className="text-indigo-800">Extra amount (tax/discount):</p>
-                <p className="font-medium text-indigo-800">₹{results.extra_amount.toFixed(2)}</p>
-              </div>
-              <div className="flex justify-between">
-                <p className="text-indigo-800">Extra per person:</p>
-                <p className="font-medium text-indigo-800">₹{results.extra_per_person.toFixed(2)}</p>
-              </div>
-            </div>
+            {/* Removed the "Extra amount" and "Extra per person" section as requested */}
 
-            <button
-              onClick={resetApp}
-              className="w-full py-3 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition-colors"
-            >
-              Start New Split
-            </button>
+            <div className="flex justify-between mt-6">
+              <button
+                onClick={() => goToStep(3)}
+                className="bg-gray-200 text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+              >
+                Back
+              </button>
+              <button
+                onClick={resetApp}
+                className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors font-medium"
+              >
+                Start New Split
+              </button>
+            </div>
           </div>
         )}
 
