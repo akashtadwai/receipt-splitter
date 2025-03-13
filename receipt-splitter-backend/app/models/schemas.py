@@ -58,6 +58,8 @@ class ReceiptSplitResponse(BaseModel):
     extra_per_person: float
 
 class StructuredOCR(BaseModel):
+    is_receipt: bool
+    reason: str
     file_name: str
     topics: list[str]
     languages: list[Language]

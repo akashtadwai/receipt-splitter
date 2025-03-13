@@ -12,9 +12,15 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [imagePreview, setImagePreview] = useState(null);
-  // New state for price editing
+
+  // Editing state
   const [editingPrices, setEditingPrices] = useState(false);
   const [editedItems, setEditedItems] = useState([]);
+  const [editedTaxes, setEditedTaxes] = useState([]);
+
+  // Discount state
+  const [discountType, setDiscountType] = useState('none'); // 'none', 'percentage', 'absolute'
+  const [discountValue, setDiscountValue] = useState(0);
 
   const handleFileChange = (e) => {
     if (e.target.files.length > 0) {
@@ -42,8 +48,9 @@ function App() {
       // Set demo image preview
       setImagePreview('/images/demo-receipt.jpeg');
 
-      // Initialize edited items with the OCR results
+      // Initialize edited items and taxes with the OCR results
       setEditedItems(data.ocr_contents.items.map(item => ({ ...item })));
+      setEditedTaxes(data.ocr_contents.total_order_bill_details.taxes.map(tax => ({ ...tax })));
 
       // Initialize item splits with regular items
       const initialSplits = data.ocr_contents.items.map(item => ({
@@ -98,8 +105,11 @@ function App() {
       const data = await response.json();
       setReceipt(data);
 
-      // Initialize edited items with the OCR results
+      // Initialize edited items and taxes with the OCR results
       setEditedItems(data.ocr_contents.items.map(item => ({ ...item })));
+      setEditedTaxes(data.ocr_contents.total_order_bill_details.taxes
+        ? data.ocr_contents.total_order_bill_details.taxes.map(tax => ({ ...tax }))
+        : []);
 
       // Initialize item splits
       const initialSplits = data.ocr_contents.items.map(item => ({
@@ -107,7 +117,7 @@ function App() {
         price: item.price,
         contributors: {},
         useCustomAmounts: false,
-        isItem: true // Flag to identify regular items
+        isItem: true
       }));
 
       // Add tax items to splits if they exist
@@ -117,7 +127,7 @@ function App() {
           price: tax.amount,
           contributors: {},
           useCustomAmounts: false,
-          isTax: true // Flag to identify tax items
+          isTax: true
         }))
         : [];
 
@@ -129,6 +139,31 @@ function App() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Calculate current total after edits and discount
+  const calculateCurrentTotal = () => {
+    const itemsTotal = editedItems.reduce((sum, item) => {
+      const price = item.price === '' ? 0 : parseFloat(item.price) || 0;
+      return sum + price;
+    }, 0);
+
+    const taxesTotal = editedTaxes.reduce((sum, tax) => {
+      const amount = tax.amount === '' ? 0 : parseFloat(tax.amount) || 0;
+      return sum + amount;
+    }, 0);
+
+    let total = itemsTotal + taxesTotal;
+
+    // Apply discount if any
+    if (discountType === 'percentage' && discountValue) {
+      total = total * (1 - (parseFloat(discountValue) / 100));
+    } else if (discountType === 'absolute' && discountValue) {
+      total = total - parseFloat(discountValue);
+    }
+
+    // Ensure total is not negative
+    return Math.max(total, 0);
   };
 
   const addPersons = () => {
@@ -143,31 +178,60 @@ function App() {
     }
     setPersonsList(newPersonsList);
 
-    // Use edited prices if in editing mode
-    const itemsToUse = editingPrices ? editedItems : receipt.ocr_contents.items;
+    // Use edited prices and taxes if in editing mode
+    const updatedSplits = [];
 
-    // Initialize all persons as contributors to each item (including taxes)
-    const updatedSplits = itemSplits.map(item => {
-      // Find the corresponding edited item if it's a regular item
-      let price = item.price;
-      if (item.isItem && editingPrices) {
-        const editedItem = itemsToUse.find(i => i.name === item.item_name);
-        if (editedItem) {
-          price = editedItem.price;
-        }
+    // Add items with potentially edited prices
+    editedItems.forEach(item => {
+      const price = item.price === '' ? 0 : parseFloat(item.price) || 0;
+      updatedSplits.push({
+        item_name: item.name,
+        price: price,
+        contributors: Object.fromEntries(
+          newPersonsList.map(person => [person, price / newPersonsList.length])
+        ),
+        useCustomAmounts: false,
+        isItem: true
+      });
+    });
+
+    // Add taxes with potentially edited amounts
+    editedTaxes.forEach(tax => {
+      const amount = tax.amount === '' ? 0 : parseFloat(tax.amount) || 0;
+      updatedSplits.push({
+        item_name: `${tax.name} (Tax/Fee)`,
+        price: amount,
+        contributors: Object.fromEntries(
+          newPersonsList.map(person => [person, amount / newPersonsList.length])
+        ),
+        useCustomAmounts: false,
+        isTax: true
+      });
+    });
+
+    // If there's a discount applied, add it as a negative item
+    if ((discountType === 'percentage' && parseFloat(discountValue) > 0) ||
+      (discountType === 'absolute' && parseFloat(discountValue) > 0)) {
+      const originalTotal = editedItems.reduce((sum, item) => sum + (parseFloat(item.price) || 0), 0) +
+        editedTaxes.reduce((sum, tax) => sum + (parseFloat(tax.amount) || 0), 0);
+
+      let discountAmount = 0;
+      if (discountType === 'percentage') {
+        discountAmount = originalTotal * (parseFloat(discountValue) / 100);
+      } else {
+        discountAmount = parseFloat(discountValue);
       }
 
-      return {
-        ...item,
-        price, // Use potentially updated price
+      updatedSplits.push({
+        item_name: `Discount ${discountType === 'percentage' ? `(${discountValue}%)` : ''}`,
+        price: -discountAmount,
         contributors: Object.fromEntries(
-          newPersonsList.map(person => [
-            person,
-            item.useCustomAmounts ? 0 : price / newPersonsList.length
-          ])
-        )
-      };
-    });
+          newPersonsList.map(person => [person, -discountAmount / newPersonsList.length])
+        ),
+        useCustomAmounts: false,
+        isDiscount: true
+      });
+    }
 
     setItemSplits(updatedSplits);
     setStep(3);
@@ -248,7 +312,7 @@ function App() {
     setItemSplits(updatedSplits);
   };
 
-  // New function to handle price editing
+  // Update item price
   const handlePriceChange = (index, newPrice) => {
     const updatedItems = [...editedItems];
     if (newPrice === '') {
@@ -257,6 +321,40 @@ function App() {
       updatedItems[index].price = parseFloat(newPrice) || 0;
     }
     setEditedItems(updatedItems);
+  };
+
+  // Update tax amount
+  const handleTaxChange = (index, newAmount) => {
+    const updatedTaxes = [...editedTaxes];
+    if (newAmount === '') {
+      updatedTaxes[index].amount = '';
+    } else {
+      updatedTaxes[index].amount = parseFloat(newAmount) || 0;
+    }
+    setEditedTaxes(updatedTaxes);
+  };
+
+  // Add a new tax
+  const addNewTax = () => {
+    const newTax = {
+      name: "New Tax/Fee",
+      amount: 0
+    };
+    setEditedTaxes([...editedTaxes, newTax]);
+  };
+
+  // Update tax name
+  const handleTaxNameChange = (index, newName) => {
+    const updatedTaxes = [...editedTaxes];
+    updatedTaxes[index].name = newName;
+    setEditedTaxes(updatedTaxes);
+  };
+
+  // Remove a tax
+  const removeTax = (index) => {
+    const updatedTaxes = [...editedTaxes];
+    updatedTaxes.splice(index, 1);
+    setEditedTaxes(updatedTaxes);
   };
 
   const validateCustomAmounts = (itemIndex) => {
@@ -282,7 +380,7 @@ function App() {
       return;
     }
 
-    // Then check for valid custom amounts (existing code)
+    // Then check for valid custom amounts
     const invalidItems = itemSplits
       .map((item, index) => ({ item, index }))
       .filter(({ item, index }) => item.useCustomAmounts && !validateCustomAmounts(index));
@@ -296,10 +394,8 @@ function App() {
     setError('');
 
     try {
-      // Calculate the total based on edited values if in edit mode
-      const calculatedTotal = editingPrices
-        ? editedItems.reduce((sum, item) => sum + (parseFloat(item.price) || 0), 0)
-        : receipt.ocr_contents.total_order_bill_details.total_bill;
+      // Calculate the total based on edited values and discount
+      const calculatedTotal = calculateCurrentTotal();
 
       const requestData = {
         items: itemSplits.map(({ item_name, price, contributors }) => ({
@@ -308,7 +404,7 @@ function App() {
           contributors
         })),
         persons: personsList,
-        // Include the total bill, using edited values if in edit mode
+        // Include the final total after edits and discount
         receipt_total: calculatedTotal
       };
 
@@ -336,7 +432,7 @@ function App() {
 
   const resetApp = () => {
     // Revoke the object URL to avoid memory leaks
-    if (imagePreview) {
+    if (imagePreview && imagePreview.startsWith('blob:')) {
       URL.revokeObjectURL(imagePreview);
     }
 
@@ -351,6 +447,9 @@ function App() {
     setError('');
     setEditingPrices(false);
     setEditedItems([]);
+    setEditedTaxes([]);
+    setDiscountType('none');
+    setDiscountValue(0);
   };
 
   // Navigation functions for back/forward
@@ -462,7 +561,7 @@ function App() {
                         : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'
                       }`}
                   >
-                    {editingPrices ? 'Remove Edits' : 'Edit Prices'}
+                    {editingPrices ? 'Done Editing' : 'Edit Prices'}
                   </button>
                 </div>
 
@@ -484,32 +583,108 @@ function App() {
                     </div>
                   ))}
 
-                  {/* Display taxes section */}
-                  {receipt.ocr_contents.total_order_bill_details.taxes &&
-                    receipt.ocr_contents.total_order_bill_details.taxes.length > 0 && (
-                      <div className="mt-4">
-                        <h4 className="text-md font-semibold mb-2 text-amber-700">Taxes & Fees</h4>
-                        {receipt.ocr_contents.total_order_bill_details.taxes.map((tax, index) => (
-                          <div key={index} className="p-3 bg-amber-50 rounded-lg hover:bg-amber-100 transition-colors">
+                  {/* Display taxes section with editing capability */}
+                  {(editedTaxes.length > 0 || editingPrices) && (
+                    <div className="mt-4">
+                      <h4 className="text-md font-semibold mb-2 text-amber-700 flex justify-between items-center">
+                        <span>Taxes & Fees</span>
+                        {editingPrices && (
+                          <button
+                            onClick={addNewTax}
+                            className="text-xs bg-amber-50 text-amber-700 px-2 py-1 rounded border border-amber-200 hover:bg-amber-100"
+                          >
+                            + Add Tax
+                          </button>
+                        )}
+                      </h4>
+
+                      {editedTaxes.map((tax, index) => (
+                        <div key={index} className="p-3 bg-amber-50 rounded-lg hover:bg-amber-100 transition-colors flex justify-between items-center">
+                          {editingPrices ? (
+                            <div className="flex-1 flex items-center gap-2">
+                              <input
+                                type="text"
+                                value={tax.name}
+                                onChange={(e) => handleTaxNameChange(index, e.target.value)}
+                                className="flex-1 p-1 border border-amber-300 rounded focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                              />
+                              <button
+                                onClick={() => removeTax(index)}
+                                className="text-red-500 hover:text-red-700"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                                </svg>
+                              </button>
+                            </div>
+                          ) : (
                             <p className="font-medium text-amber-900">{tax.name}</p>
+                          )}
+
+                          {editingPrices ? (
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={tax.amount}
+                              onChange={(e) => handleTaxChange(index, e.target.value)}
+                              className="w-24 p-1 text-right border border-amber-300 rounded focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                            />
+                          ) : (
                             <p className="text-right text-amber-800">₹{tax.amount.toFixed(2)}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Discount section */}
+                  {(
+                    <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                      <h4 className="font-semibold text-green-800 mb-2">Apply Discount</h4>
+                      <div className="flex items-center space-x-4">
+                        <select
+                          value={discountType}
+                          onChange={(e) => setDiscountType(e.target.value)}
+                          className="p-2 border border-green-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                        >
+                          <option value="none">No Discount</option>
+                          <option value="percentage">Percentage</option>
+                          <option value="absolute">Absolute Amount</option>
+                        </select>
+
+                        {discountType !== 'none' && (
+                          <div className="flex items-center">
+                            <input
+                              type="number"
+                              min="0"
+                              max={discountType === 'percentage' ? "100" : undefined}
+                              step="0.01"
+                              value={discountValue}
+                              onChange={(e) => setDiscountValue(e.target.value)}
+                              className="w-24 p-2 border border-green-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                            />
+                            <span className="ml-2 text-green-800">
+                              {discountType === 'percentage' ? '%' : '₹'}
+                            </span>
                           </div>
-                        ))}
+                        )}
                       </div>
-                    )}
+                    </div>
+                  )}
 
                   <div className="p-3 bg-indigo-200 rounded-lg">
                     <p className="font-bold text-indigo-900">Total</p>
                     <p className="text-right font-bold text-indigo-900">
-                      {editingPrices ? (
-                        "₹" + editedItems.reduce((sum, item) => {
-                          const price = item.price === '' ? 0 : parseFloat(item.price) || 0;
-                          return sum + price;
-                        }, 0).toFixed(2)
-                      ) : (
-                        "₹" + receipt.ocr_contents.total_order_bill_details.total_bill.toFixed(2)
-                      )}
+                      ₹{calculateCurrentTotal().toFixed(2)}
                     </p>
+
+                    {discountType !== 'none' && parseFloat(discountValue) > 0 && (
+                      <div className="mt-1 text-xs text-right text-green-700">
+                        <p>Original: ₹{(editedItems.reduce((sum, item) => sum + (parseFloat(item.price) || 0), 0) +
+                          editedTaxes.reduce((sum, tax) => sum + (parseFloat(tax.amount) || 0), 0)).toFixed(2)}</p>
+                        <p>Discount: {discountType === 'percentage' ? `${discountValue}%` : `₹${discountValue}`}</p>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -546,11 +721,21 @@ function App() {
                 </button>
               </div>
 
-              {editingPrices && editedItems.some((item, i) =>
-                item.price !== receipt.ocr_contents.items[i].price ||
-                (item.price === '' && receipt.ocr_contents.items[i].price !== 0)) && (
+              {editingPrices && (
+                editedItems.some((item, i) =>
+                  item.price !== receipt.ocr_contents.items[i].price ||
+                  (item.price === '' && receipt.ocr_contents.items[i].price !== 0)
+                ) ||
+                editedTaxes.length !== receipt.ocr_contents.total_order_bill_details.taxes.length ||
+                editedTaxes.some((tax, i) =>
+                  i < receipt.ocr_contents.total_order_bill_details.taxes.length &&
+                  (tax.amount !== receipt.ocr_contents.total_order_bill_details.taxes[i].amount ||
+                    tax.name !== receipt.ocr_contents.total_order_bill_details.taxes[i].name)
+                ) ||
+                discountType !== 'none'
+              ) && (
                   <p className="mt-2 text-amber-600 text-sm">
-                    ⚠️ You've edited prices. Make sure your total looks correct before continuing.
+                    ⚠️ You've edited the receipt. Make sure your total looks correct before continuing.
                   </p>
                 )}
             </div>
@@ -720,6 +905,93 @@ function App() {
                             {!validateCustomAmounts(itemIndex) && (
                               <div className="flex justify-between text-sm">
                                 <span className="text-amber-800">Remaining to allocate:</span>
+                                <span className="font-medium text-amber-600">
+                                  ₹{(item.price - Object.values(item.contributors)
+                                    .reduce((sum, amount) => {
+                                      const numAmount = amount === '' ? 0 : parseFloat(amount) || 0;
+                                      return sum + numAmount;
+                                    }, 0))
+                                    .toFixed(2)}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Discount section (if a discount was applied) */}
+              {itemSplits.filter(item => item.isDiscount).length > 0 && (
+                <div>
+                  <h3 className="text-lg font-semibold mb-2 text-green-700">Discount</h3>
+                  {itemSplits.filter(item => item.isDiscount).map((item, originalIndex) => {
+                    const itemIndex = itemSplits.findIndex(i => i === item);
+                    return (
+                      <div key={itemIndex} className="p-4 border border-green-200 rounded-lg bg-green-50 mb-3">
+                        <div className="flex justify-between items-center mb-2">
+                          <h3 className="font-semibold text-green-900">{item.item_name}</h3>
+                          <p className="text-green-800 font-medium">₹{item.price.toFixed(2)}</p>
+                        </div>
+
+                        <div className="flex items-center mb-3">
+                          <label className="flex items-center text-green-800">
+                            <input
+                              type="checkbox"
+                              checked={item.useCustomAmounts}
+                              onChange={() => toggleCustomAmounts(itemIndex)}
+                              className="mr-2 h-4 w-4 text-green-600 border-green-300 rounded focus:ring-green-500"
+                            />
+                            Use custom amounts
+                          </label>
+                        </div>
+
+                        <div className="space-y-2">
+                          {personsList.map((person) => (
+                            <div key={person} className="flex items-center justify-between bg-white p-2 rounded-lg">
+                              <label className="flex items-center flex-1">
+                                <input
+                                  type="checkbox"
+                                  checked={item.contributors.hasOwnProperty(person)}
+                                  onChange={() => toggleContributor(itemIndex, person)}
+                                  className="mr-2 h-4 w-4 text-green-600 border-green-300 rounded focus:ring-green-500"
+                                />
+                                <span className="text-green-900">{person}</span>
+                              </label>
+                              {item.useCustomAmounts && item.contributors.hasOwnProperty(person) && (
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  value={item.contributors[person]}
+                                  onChange={(e) => handleCustomAmountChange(itemIndex, person, e.target.value)}
+                                  className="w-24 p-1 border border-green-200 rounded focus:ring-green-500 focus:border-green-500"
+                                />
+                              )}
+                              {!item.useCustomAmounts && item.contributors.hasOwnProperty(person) && (
+                                <span className="text-green-600">₹{item.contributors[person].toFixed(2)}</span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+
+                        {item.useCustomAmounts && (
+                          <div className="mt-2 space-y-1">
+                            <div className="flex justify-between text-sm">
+                              <span className="text-green-800">Total assigned:</span>
+                              <span className={`font-medium ${validateCustomAmounts(itemIndex) ? 'text-green-600' : 'text-red-600'}`}>
+                                ₹{Object.values(item.contributors)
+                                  .reduce((sum, amount) => {
+                                    const numAmount = amount === '' ? 0 : parseFloat(amount) || 0;
+                                    return sum + numAmount;
+                                  }, 0)
+                                  .toFixed(2)} / ₹{item.price.toFixed(2)}
+                              </span>
+                            </div>
+                            {!validateCustomAmounts(itemIndex) && (
+                              <div className="flex justify-between text-sm">
+                                <span className="text-green-800">Remaining to allocate:</span>
                                 <span className="font-medium text-amber-600">
                                   ₹{(item.price - Object.values(item.contributors)
                                     .reduce((sum, amount) => {
