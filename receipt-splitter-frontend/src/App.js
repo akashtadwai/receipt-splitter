@@ -563,7 +563,7 @@ function App() {
                         : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'
                       }`}
                   >
-                    {editingPrices ? 'Done Editing' : 'Edit Prices'}
+                    {editingPrices ? 'Reset to Original' : 'Edit Prices'}
                   </button>
                 </div>
 
