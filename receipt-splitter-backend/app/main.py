@@ -1,9 +1,8 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.models.schemas import OCRResponse, ReceiptSplitRequest, ReceiptSplitResponse
+from app.models.schemas import StructuredOCR
 from app.services.ocr_service import structured_ocr
-from app.services.calculator import calculate_split
 from app.config.settings import ENABLE_CORS, CORS_ORIGINS
 
 app = FastAPI(title="Receipt Splitter API")
@@ -18,7 +17,7 @@ if ENABLE_CORS:
         allow_headers=["*"],
     )
 
-@app.post("/process-receipt", response_model=OCRResponse)
+@app.post("/process-receipt", response_model=StructuredOCR)
 async def process_receipt(file: UploadFile = File(...)):
     """Process a receipt image using Mistral OCR"""
     try:
@@ -36,22 +35,6 @@ async def process_receipt(file: UploadFile = File(...)):
         # Log the error for debugging
         print(f"Error processing receipt: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error processing receipt: {str(e)}")
-
-@app.post("/calculate-split", response_model=ReceiptSplitResponse)
-async def calculate_receipt_split(data: ReceiptSplitRequest):
-    """Calculate how to split a receipt among multiple people"""
-    try:
-        # Use the calculator service
-        result = calculate_split(
-            items=data.items,
-            persons=data.persons,
-            receipt_total=data.receipt_total
-        )
-        return result
-    except ZeroDivisionError:
-        raise HTTPException(status_code=400, detail="No persons provided for split")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error calculating split: {str(e)}")
 
 # Health check endpoint that will be pinged
 @app.get("/health")

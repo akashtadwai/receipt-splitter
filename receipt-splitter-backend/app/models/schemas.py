@@ -16,47 +16,6 @@ class Language(Enum, metaclass=LanguageMeta):
     pass
 
 # API Models
-class Item(BaseModel):
-    name: str
-    price: float
-
-class Tax(BaseModel):
-    name: str
-    amount: float
-
-class TotalOrderBillDetails(BaseModel):
-    total_bill: float
-    taxes: List[Tax] = []
-
-class OCRContents(BaseModel):
-    items: List[Item]
-    total_order_bill_details: TotalOrderBillDetails
-
-class OCRResponse(BaseModel):
-    file_name: str
-    topics: List[str]
-    languages: List[str]
-    ocr_contents: OCRContents
-
-class ItemSplit(BaseModel):
-    item_name: str
-    price: float
-    contributors: Dict[str, float]  # Map of person name to amount
-
-class ReceiptSplitRequest(BaseModel):
-    items: List[ItemSplit]
-    persons: List[str]
-    receipt_total: float
-
-class PersonAmountPair(BaseModel):
-    person: str
-    amount: float
-
-class ReceiptSplitResponse(BaseModel):
-    breakdown: List[PersonAmountPair]
-    extra_amount: float
-    extra_per_person: float
-
 class StructuredOCR(BaseModel):
     is_receipt: bool
     reason: str

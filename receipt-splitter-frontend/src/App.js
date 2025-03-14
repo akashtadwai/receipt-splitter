@@ -366,6 +366,33 @@ function App() {
     return Math.abs(total - item.price) < 0.01; // Allow for small rounding errors
   };
 
+  const calculatePersonTotals = (items, persons, receipt_total) => {  
+  const person_totals = {};
+  persons.forEach(person => {
+    person_totals[person] = 0.0;
+  });
+  
+  // Add item costs based on contributions
+  items.forEach(item => {
+    Object.entries(item.contributors).forEach(([person, amount]) => {
+      if (person in person_totals) {
+        person_totals[person] += amount;
+      }
+    });
+  });
+  
+  
+  // Format the response with rounding (same as backend)
+  const breakdown = Object.entries(person_totals).map(([person, amount]) => ({
+    person: person,
+    amount: Math.round(amount * 100) / 100 // Round to 2 decimal places
+  }));
+  
+  return {
+    breakdown: breakdown,
+  };
+};
+
   const calculateSplit = async () => {
     // First, check if any item has no contributors
     const itemsWithNoContributors = itemSplits
@@ -394,31 +421,18 @@ function App() {
       // Calculate the total based on edited values and discount
       const calculatedTotal = calculateCurrentTotal();
 
-      const requestData = {
-        items: itemSplits.map(({ item_name, price, contributors }) => ({
-          item_name,
-          price,
-          contributors
-        })),
-        persons: personsList,
-        // Include the final total after edits and discount
-        receipt_total: calculatedTotal
-      };
+      const itemsForCalculation = itemSplits.map(({ item_name, price, contributors }) => ({
+        item_name,
+        price,
+        contributors
+      }));
+      const result = calculatePersonTotals(
+        itemsForCalculation,
+        personsList,
+        calculatedTotal
+      );
 
-      const response = await fetch(`${API_URL}/calculate-split`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(requestData)
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to calculate split');
-      }
-
-      const data = await response.json();
-      setResults(data);
+      setResults(result);
       setStep(4);
     } catch (err) {
       setError('Error calculating split: ' + err.message);

@@ -3,7 +3,6 @@ import json
 import time
 import httpx
 from pathlib import Path
-from typing import Dict, Any
 
 from fastapi import HTTPException
 from mistralai import Mistral, ImageURLChunk, TextChunk
@@ -14,7 +13,7 @@ from app.config.settings import MISTRAL_API_KEY, MISTRAL_VISION_MODEL, PROMPT
 # Initialize Mistral client
 client = Mistral(api_key=MISTRAL_API_KEY)
 
-async def structured_ocr(image_data: bytes, filename: str) -> Dict[str, Any]:
+async def structured_ocr(image_data: bytes, filename: str) -> StructuredOCR:
     """Process image with Mistral OCR API and structure the results in a single API call"""
     # Save image temporarily
     temp_path = Path(f"temp_{filename}")
@@ -33,7 +32,7 @@ async def structured_ocr(image_data: bytes, filename: str) -> Dict[str, Any]:
         if temp_path.exists():
             temp_path.unlink()
 
-async def process_with_vision_model(base64_data_url: str, filename: str) -> Dict[str, Any]:
+async def process_with_vision_model(base64_data_url: str, filename: str) -> StructuredOCR:
     """Process image with vision model and extract structured data in one call"""
     for attempt in range(5):  # Try up to 5 times
         try:
@@ -57,21 +56,7 @@ async def process_with_vision_model(base64_data_url: str, filename: str) -> Dict
                 reason = raw_response.get("reason", "The image doesn't appear to be a valid receipt")
                 raise HTTPException(status_code=400, detail=reason)
             
-            # Format the response for our schema
-            formatted_response = {
-                "file_name": Path(filename).stem,
-                "topics": raw_response.get("topics", []),
-                "languages": raw_response.get("languages", []),
-                "ocr_contents": {
-                    "items": raw_response.get("ocr_contents", {}).get("items", []),
-                    "total_order_bill_details": raw_response.get('ocr_contents',{}).get("total_order_bill_details", {
-                        "total_bill": 0.0,
-                        "taxes": []
-                    })
-                }
-            }
-            
-            return formatted_response
+            return chat_response.choices[0].message.parsed
             
         except httpx.RemoteProtocolError as e:
             if attempt < 4 and hasattr(e, 'status_code') and e.status_code == 429:
