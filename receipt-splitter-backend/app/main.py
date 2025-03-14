@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.models.schemas import OCRResponse, ReceiptSplitRequest, ReceiptSplitResponse
 from app.services.ocr_service import structured_ocr
 from app.services.calculator import calculate_split
-from app.config.settings import ENABLE_CORS, CORS_ORIGINS, MOCK_OCR_OUTPUT, MOCK_DATA_ENABLED
+from app.config.settings import ENABLE_CORS, CORS_ORIGINS
 
 app = FastAPI(title="Receipt Splitter API")
 
@@ -21,12 +21,6 @@ if ENABLE_CORS:
 @app.post("/process-receipt", response_model=OCRResponse)
 async def process_receipt(file: UploadFile = File(...)):
     """Process a receipt image using Mistral OCR"""
-    if MOCK_DATA_ENABLED:
-        return MOCK_OCR_OUTPUT
-        
-    if not file:
-        raise HTTPException(status_code=400, detail="No file uploaded")
-        
     try:
         # Read file content
         file_content = await file.read()
@@ -58,11 +52,6 @@ async def calculate_receipt_split(data: ReceiptSplitRequest):
         raise HTTPException(status_code=400, detail="No persons provided for split")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error calculating split: {str(e)}")
-
-@app.get("/mock-receipt")
-async def get_mock_receipt():
-    """Get mock receipt data for testing"""
-    return MOCK_OCR_OUTPUT
 
 if __name__ == "__main__":
     import uvicorn

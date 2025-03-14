@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import './App.css';
+import Constants from './Constants'
 
 function App() {
   const API_URL = process.env.REACT_APP_API_URL || '';
-  console.log("API_URL ",API_URL)
   const [receipt, setReceipt] = useState(null);
   const [persons, setPersons] = useState('');
   const [personsList, setPersonsList] = useState([]);
@@ -38,13 +38,8 @@ function App() {
     setIsLoading(true);
     setError('');
     try {
-      // Fetch mock data from backend
-      const response = await fetch(`${API_URL}/mock-receipt`);
-      if (!response.ok) {
-        throw new Error('Failed to load demo data');
-      }
-
-      const data = await response.json();
+      // Fetch mock data
+      const data = Constants.MOCK_OCR_OUTPUT;
       setReceipt(data);
 
       // Set demo image preview

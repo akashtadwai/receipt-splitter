@@ -8,19 +8,6 @@ class TestAPI:
     
     client = TestClient(app)
     
-    def test_mock_receipt_endpoint(self):
-        """Test the mock receipt endpoint returns expected data structure"""
-        # Act
-        response = self.client.get("/mock-receipt")
-        
-        # Assert
-        assert response.status_code == 200
-        data = response.json()
-        assert "file_name" in data
-        assert "ocr_contents" in data
-        assert "items" in data["ocr_contents"]
-        assert "total_order_bill_details" in data["ocr_contents"]
-    
     @pytest.mark.asyncio
     @patch("app.main.structured_ocr")
     async def test_process_receipt_success(self, mock_structured_ocr):
