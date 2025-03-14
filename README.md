@@ -1,6 +1,6 @@
 # Receipt Splitter 🧾💰
 
-**Live Demo:** [https://receipt-splitter-frontend.onrender.com](https://receipt-splitter-frontend.onrender.com)
+**Live Demo:** [https://bill-iant.onrender.com/](https://bill-iant.onrender.com/)
 
 🧾 Making split bills magical with Claude \& Mistral AI ✨
 
