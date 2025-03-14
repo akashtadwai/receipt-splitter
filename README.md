@@ -1,4 +1,4 @@
-# Receipt Splitter 🧾💰
+# bill-iant🧾💰
 
 **Live Demo:** [https://bill-iant.onrender.com/](https://bill-iant.onrender.com/)
 
