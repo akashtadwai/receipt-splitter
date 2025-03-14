@@ -8,14 +8,24 @@
       "type": "image/x-icon"
     },
     {
-      "src": "logo192.png",
+      "src": "icons8-split-money-arcade-16.png",
       "type": "image/png",
-      "sizes": "192x192"
+      "sizes": "16x16"
     },
     {
-      "src": "logo512.png",
+      "src": "icons8-split-money-arcade-32.png",
       "type": "image/png",
-      "sizes": "512x512"
+      "sizes": "32x32"
+    },
+    {
+      "src": "icons8-split-money-arcade-72.png",
+      "type": "image/png",
+      "sizes": "72x72"
+    },
+    {
+      "src": "icons8-split-money-arcade-96.png",
+      "type": "image/png",
+      "sizes": "96x96"
     }
   ],
   "start_url": ".",
