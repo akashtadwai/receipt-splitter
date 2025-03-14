@@ -53,6 +53,11 @@ async def calculate_receipt_split(data: ReceiptSplitRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error calculating split: {str(e)}")
 
+# Health check endpoint that will be pinged
+@app.get("/health")
+async def health_check():
+    return {"status": "ok", "message": "Application is running"}
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
