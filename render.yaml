@@ -14,7 +14,7 @@ services:
 
   # Frontend static site
   - type: web
-    name: receipt-splitter-frontend
+    name: bill-iant
     runtime: static
     buildCommand: cd receipt-splitter-frontend && npm install && npm run build
     staticPublishPath: ./receipt-splitter-frontend/build
