@@ -17,9 +17,24 @@ ENABLE_CORS = True
 CORS_ORIGINS = ["*"]  # In production, restrict this to your frontend URL
 PROMPT = \
 """
-    "First determine if this image is a receipt or bill. "
-    "If it is NOT a receipt/bill (doesn't contain items with prices and a total), "
-    "respond with: {\"is_receipt\": false, \"reason\": \"explanation\"}.\n\n"
+    "INITIAL DETECTION - Carefully analyze if this image is ACTUALLY a receipt/bill/invoice:
+    - A valid receipt MUST have ALL of these elements:
+    * A clear list of purchased items with corresponding prices
+    * A structured format with items aligned in rows/columns
+    * A clearly marked total amount
+    * Usually contains business name, date, and payment information
+    * Consistent currency symbols (₹, $, €, etc.) before numerical values
+
+    - This is NOT a receipt if ANY of these are true:
+    * Contains mathematical equations, formulas, or academic notation
+    * Contains LaTeX or other technical/scientific symbols (σ, ∫, ∑, ≡, etc.)
+    * Has variables, functions, or mathematical expressions (e.g., max(F(T) - K, 0))
+    * Primarily consists of paragraphs of text without itemized prices
+    * Is a menu, poster, advertisement, or academic paper
+    * Lacks a clear itemized structure and total amount
+
+    If it is NOT a receipt/bill (doesn't satisfy ALL receipt criteria or matches ANY non-receipt criteria), respond with: {\"is_receipt\": false, \"reason\": \"explanation\"}.\n\n"
+
     "If it IS a receipt/bill, extract the data with EXACTLY these requirements:\n"
     "1. Items section must contain product purchases only with their FINAL prices (not MRP)\n"
     "2. The final total_bill should be the actual amount paid by the customer\n"
