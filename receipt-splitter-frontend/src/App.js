@@ -135,12 +135,15 @@ function App() {
             setError={setError}
           />
         )}
-
+      {// also add total bill in step-4 results so that they are copy pastable in the end
+      }
         {step === 4 && results && (
           <Results
             results={results}
             goToStep={goToStep}
             resetApp={resetApp}
+            itemSplits={itemSplits}
+            calculateCurrentTotal={calculateCurrentTotal}
           />
         )}
 
