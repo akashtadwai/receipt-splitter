@@ -1,4 +1,4 @@
-# bill-iant🧾💰 <div style="text-align: right; display: inline-block;">[![codecov](https://codecov.io/github/akashtadwai/receipt-splitter/graph/badge.svg?token=AWH1ZB213P)](https://codecov.io/github/akashtadwai/receipt-splitter)</div>
+# bill-iant🧾💰 [![codecov](https://codecov.io/github/akashtadwai/receipt-splitter/graph/badge.svg?token=AWH1ZB213P)](https://codecov.io/github/akashtadwai/receipt-splitter)
 
 **Live Demo:** [https://bill-iant.onrender.com/](https://bill-iant.onrender.com/)
 
