@@ -23,7 +23,6 @@
     ]
   },
   "jest": {
-    "collectCoverage": true,
     "coverageReporters": [
       "json",
       "lcov",

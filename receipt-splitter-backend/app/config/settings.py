@@ -6,8 +6,6 @@ load_dotenv()
 
 # API Keys
 MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
-if not MISTRAL_API_KEY:
-    raise ValueError("MISTRAL_API_KEY environment variable is not set")
 
 # API Constants
 MISTRAL_VISION_MODEL = "pixtral-12b-latest" 
