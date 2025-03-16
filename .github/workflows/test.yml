@@ -14,20 +14,24 @@ jobs:
         working-directory: ./receipt-splitter-frontend
     steps:
       - uses: actions/checkout@v3
+      
       - name: Set up Node
         uses: actions/setup-node@v3
         with:
           node-version: '16'
           cache: 'npm'
           cache-dependency-path: '**/package-lock.json'
+          
       - name: Install dependencies
         run: npm ci
+        
       - name: Run tests with coverage
-        run: npm run test:coverage
+        run: npm test -- --coverage --watchAll=false
+        
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
         with:
-          directory: ./coverage/
+          files: ./receipt-splitter-frontend/coverage/lcov.info
           flags: frontend
           fail_ci_if_error: false
 
@@ -38,18 +42,22 @@ jobs:
         working-directory: ./receipt-splitter-backend
     steps:
       - uses: actions/checkout@v3
+      
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
           cache: 'pip'
+          
       - name: Install dependencies
         run: pip install -r requirements.txt
+        
       - name: Run tests with coverage
         run: pytest --cov=app --cov-report=xml
+        
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
         with:
-          file: ./coverage.xml
+          files: ./receipt-splitter-backend/coverage.xml
           flags: backend
           fail_ci_if_error: false
