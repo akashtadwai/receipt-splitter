@@ -87,3 +87,202 @@ describe('PersonsInput', () => {
         );
     });
 });
+
+describe('PersonsInput - Receipt Editing Warnings', () => {
+    const baseProps = {
+        persons: 'Alice, Bob',
+        setPersons: jest.fn(),
+        setPersonsList: jest.fn(),
+        setStep: jest.fn(),
+        goToStep: jest.fn(),
+        editingPrices: true,
+        setError: jest.fn(),
+        setItemSplits: jest.fn(),
+        discountType: 'none',
+        discountValue: 0
+    };
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+    });
+
+    it('shows warning when item prices are edited', () => {
+        const props = {
+            ...baseProps,
+            editedItems: [
+                { name: 'Pizza', price: 120 }, // Changed price
+                { name: 'Pasta', price: 200 }
+            ],
+            editedTaxes: [{ name: 'Service Tax', amount: 30 }],
+            receipt: {
+                ocr_contents: {
+                    items: [
+                        { name: 'Pizza', price: 100 }, // Original price
+                        { name: 'Pasta', price: 200 }
+                    ],
+                    total_order_bill_details: {
+                        taxes: [{ name: 'Service Tax', amount: 30 }]
+                    }
+                }
+            }
+        };
+
+        render(<PersonsInput {...props} />);
+        expect(screen.getByText(/You've edited the receipt/)).toBeInTheDocument();
+    });
+
+    it('shows warning when item price is empty', () => {
+        const props = {
+            ...baseProps,
+            editedItems: [
+                { name: 'Pizza', price: '' }, // Empty price
+                { name: 'Pasta', price: 200 }
+            ],
+            editedTaxes: [{ name: 'Service Tax', amount: 30 }],
+            receipt: {
+                ocr_contents: {
+                    items: [
+                        { name: 'Pizza', price: 100 },
+                        { name: 'Pasta', price: 200 }
+                    ],
+                    total_order_bill_details: {
+                        taxes: [{ name: 'Service Tax', amount: 30 }]
+                    }
+                }
+            }
+        };
+
+        render(<PersonsInput {...props} />);
+        expect(screen.getByText(/You've edited the receipt/)).toBeInTheDocument();
+    });
+
+    it('shows warning when tax count changes', () => {
+        const props = {
+            ...baseProps,
+            editedItems: [
+                { name: 'Pizza', price: 100 },
+                { name: 'Pasta', price: 200 }
+            ],
+            editedTaxes: [
+                { name: 'Service Tax', amount: 30 },
+                { name: 'New Tax', amount: 20 } // Added new tax
+            ],
+            receipt: {
+                ocr_contents: {
+                    items: [
+                        { name: 'Pizza', price: 100 },
+                        { name: 'Pasta', price: 200 }
+                    ],
+                    total_order_bill_details: {
+                        taxes: [{ name: 'Service Tax', amount: 30 }]
+                    }
+                }
+            }
+        };
+
+        render(<PersonsInput {...props} />);
+        expect(screen.getByText(/You've edited the receipt/)).toBeInTheDocument();
+    });
+
+    it('shows warning when tax amount is edited', () => {
+        const props = {
+            ...baseProps,
+            editedItems: [
+                { name: 'Pizza', price: 100 },
+                { name: 'Pasta', price: 200 }
+            ],
+            editedTaxes: [{ name: 'Service Tax', amount: 40 }], // Changed amount
+            receipt: {
+                ocr_contents: {
+                    items: [
+                        { name: 'Pizza', price: 100 },
+                        { name: 'Pasta', price: 200 }
+                    ],
+                    total_order_bill_details: {
+                        taxes: [{ name: 'Service Tax', amount: 30 }]
+                    }
+                }
+            }
+        };
+
+        render(<PersonsInput {...props} />);
+        expect(screen.getByText(/You've edited the receipt/)).toBeInTheDocument();
+    });
+
+    it('shows warning when tax name is edited', () => {
+        const props = {
+            ...baseProps,
+            editedItems: [
+                { name: 'Pizza', price: 100 },
+                { name: 'Pasta', price: 200 }
+            ],
+            editedTaxes: [{ name: 'Changed Tax Name', amount: 30 }], // Changed name
+            receipt: {
+                ocr_contents: {
+                    items: [
+                        { name: 'Pizza', price: 100 },
+                        { name: 'Pasta', price: 200 }
+                    ],
+                    total_order_bill_details: {
+                        taxes: [{ name: 'Service Tax', amount: 30 }]
+                    }
+                }
+            }
+        };
+
+        render(<PersonsInput {...props} />);
+        expect(screen.getByText(/You've edited the receipt/)).toBeInTheDocument();
+    });
+
+    it('shows warning when discount is added', () => {
+        const props = {
+            ...baseProps,
+            editedItems: [
+                { name: 'Pizza', price: 100 },
+                { name: 'Pasta', price: 200 }
+            ],
+            editedTaxes: [{ name: 'Service Tax', amount: 30 }],
+            discountType: 'percentage', // Added discount
+            discountValue: 10,
+            receipt: {
+                ocr_contents: {
+                    items: [
+                        { name: 'Pizza', price: 100 },
+                        { name: 'Pasta', price: 200 }
+                    ],
+                    total_order_bill_details: {
+                        taxes: [{ name: 'Service Tax', amount: 30 }]
+                    }
+                }
+            }
+        };
+
+        render(<PersonsInput {...props} />);
+        expect(screen.getByText(/You've edited the receipt/)).toBeInTheDocument();
+    });
+
+    it('does not show warning when nothing is edited', () => {
+        const props = {
+            ...baseProps,
+            editedItems: [
+                { name: 'Pizza', price: 100 },
+                { name: 'Pasta', price: 200 }
+            ],
+            editedTaxes: [{ name: 'Service Tax', amount: 30 }],
+            receipt: {
+                ocr_contents: {
+                    items: [
+                        { name: 'Pizza', price: 100 },
+                        { name: 'Pasta', price: 200 }
+                    ],
+                    total_order_bill_details: {
+                        taxes: [{ name: 'Service Tax', amount: 30 }]
+                    }
+                }
+            }
+        };
+
+        render(<PersonsInput {...props} />);
+        expect(screen.queryByText(/You've edited the receipt/)).not.toBeInTheDocument();
+    });
+});

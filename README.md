@@ -76,6 +76,12 @@ To run the backend tests:
 cd receipt-splitter-backend
 pytest
 ```
+To run the frontend tests:
+
+```bash
+cd receipt-splitter-frontend
+npm test -- --watchAll=false
+```
 
 
 ## Technologies Used 💻
