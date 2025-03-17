@@ -118,40 +118,43 @@ const Results = ({ results, goToStep, resetApp, itemSplits, calculateCurrentTota
 
                     {/* Receipt Details */}
                     <div className="bg-white rounded-xl shadow-sm border border-indigo-100 p-4 relative">
-                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Receipt Details</h3>
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4">
+                            <h3 className="text-lg font-semibold text-gray-900 mb-2 sm:mb-0">Receipt Details</h3>
+                            <button
+                                onClick={handleCopy}
+                                className={`
+                inline-flex items-center gap-2 px-4 py-2 rounded-lg 
+                ${copied ? 'bg-green-500' : 'bg-indigo-600'} 
+                text-white shadow-sm hover:shadow-md transition-all
+                text-sm sm:text-base font-medium
+            `}
+                            >
+                                {copied ? (
+                                    <>
+                                        <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                        </svg>
+                                        <span>Copied!</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                                d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                                        </svg>
+                                        <span>Copy Details</span>
+                                    </>
+                                )}
+                            </button>
+                        </div>
                         <textarea
                             ref={textAreaRef}
                             className="w-full h-48 p-4 bg-gray-50 rounded-lg font-mono text-sm border-0 focus:ring-2 focus:ring-indigo-500 resize-none"
                             value={generateReceiptText()}
                             readOnly
                         />
-                        <button
-                            onClick={handleCopy}
-                            className={`
-                                absolute top-4 right-4 px-4 py-2 rounded-lg 
-                                ${copied ? 'bg-green-500' : 'bg-indigo-600'} 
-                                text-white shadow-sm hover:shadow-md transition-all
-                                flex items-center gap-2 font-medium
-                            `}
-                        >
-                            {copied ? (
-                                <>
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                    </svg>
-                                    Copied!
-                                </>
-                            ) : (
-                                <>
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                                            d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
-                                    </svg>
-                                    Copy Details
-                                </>
-                            )}
-                        </button>
                     </div>
+
                 </div>
             </div>
 
