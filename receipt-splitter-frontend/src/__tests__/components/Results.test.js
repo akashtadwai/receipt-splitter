@@ -12,12 +12,12 @@ describe('Results', () => {
         };
 
         const mockItemSplits = [
-            { isItem: true, item_name: 'Item1', price: 10 },
-            { isTax: true, item_name: 'Tax1', price: 2 },
-            { isDiscount: true, item_name: 'Discount1', price: -1 }
+            { isItem: true, item_name: 'Item1', price: 10, contributors: { 'Alice': 10 } },
+            { isTax: true, item_name: 'Tax1', price: 2, contributors: { 'Alice': 2 } },
+            { isDiscount: true, item_name: 'Discount1', price: -1, contributors: { 'Alice': -1 } }
         ];
 
-        const mockCalculateCurrentTotal = jest.fn(() => 45.5);
+        const mockCalculateCurrentTotal = jest.fn();
 
         const mockProps = {
             results: mockResults,
