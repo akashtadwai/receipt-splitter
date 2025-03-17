@@ -37,6 +37,46 @@ const Results = ({ results, goToStep, resetApp, itemSplits, calculateCurrentTota
             lines.push(`${person}: ₹${amount.toFixed(2)}`);
         });
 
+        lines.push('\nContribution Table:');
+
+        const persons = results.breakdown.map(b => b.person);
+        const maxItemLength = Math.max(...itemSplits.map(item => item.item_name.length), 'Item'.length);
+        const columnWidth = Math.max(...persons.map(p => p.length));
+
+        // Helper function to center text in a given width
+        const centerText = (text, width) => {
+            const padding = width - text.length;
+            const leftPad = Math.floor(padding / 2);
+            const rightPad = padding - leftPad;
+            return ' '.repeat(leftPad) + text + ' '.repeat(rightPad);
+        };
+
+        // Create table border line
+        const tableBorder = '+' + '-'.repeat(maxItemLength + 2) + '+' +
+            persons.map(() => '-'.repeat(columnWidth + 2) + '+').join('');
+
+        // Header row
+        lines.push(tableBorder);
+        lines.push(
+            '| ' + centerText('Item', maxItemLength) + ' |' +
+            persons.map(p => centerText(p, columnWidth + 2) + '|').join('')
+        );
+        lines.push(tableBorder);
+
+        // Data rows
+        itemSplits.forEach(item => {
+            if (item.isItem || item.isTax) {
+                const rowCells = persons.map(person =>
+                    centerText(item.contributors.hasOwnProperty(person) ? '✓' : '×', columnWidth + 2) + '|'
+                );
+                lines.push(
+                    '| ' + centerText(item.item_name, maxItemLength) + ' |' +
+                    rowCells.join('')
+                );
+                lines.push(tableBorder);
+            }
+        });
+
         return lines.join('\n');
     };
 
