@@ -84,17 +84,22 @@ describe('Results', () => {
             render(<Results {...mockProps} />);
 
             const receiptText = screen.getByRole('textbox').value;
-            expect(receiptText).toContain('Receipt Breakdown:');
-            expect(receiptText).toContain('Item1: ₹10.00');
-            expect(receiptText).toContain('Tax1: ₹2.00');
-            expect(receiptText).toContain('Discount1: ₹-1.00');
+
+            // Validate receipt text structure
             expect(receiptText).toContain('Total Bill: ₹45.50');
             expect(receiptText).toContain('Split Breakdown:');
             expect(receiptText).toContain('Alice: ₹25.50');
             expect(receiptText).toContain('Bob: ₹30.75');
             expect(receiptText).toContain('Charlie: ₹15.25');
-        });
 
+            expect(receiptText).toContain('Contribution List:');
+            expect(receiptText).toContain('Item1: ₹10.00');
+            expect(receiptText).toContain('  • Alice: ₹10.00');
+            expect(receiptText).toContain('Tax1: ₹2.00');
+            expect(receiptText).toContain('  • Alice: ₹2.00');
+            expect(receiptText).toContain('Discount1: ₹-1.00');
+            expect(receiptText).toContain('  • Alice: ₹-1.00');
+        });
 
     it('copies receipt text to clipboard', async () => {
         jest.useFakeTimers();
@@ -139,55 +144,5 @@ describe('Results', () => {
 
         // Clean up timers
         jest.useRealTimers();
-    });
-    it('generates table with centered content', () => {
-        const mockData = {
-            results: {
-                breakdown: [
-                    { person: 'Alexander', amount: 25.50 },
-                    { person: 'Bob', amount: 30.75 }
-                ]
-            },
-            itemSplits: [
-                {
-                    item_name: 'Long Pizza Name',
-                    price: 40,
-                    isItem: true,
-                    contributors: { 'Alexander': 20, 'Bob': 20 }
-                },
-                {
-                    item_name: 'Coke',
-                    price: 10,
-                    isItem: true,
-                    contributors: { 'Bob': 10 }
-                }
-            ],
-            calculateCurrentTotal: () => 50,
-            goToStep: jest.fn(),
-            resetApp: jest.fn()
-        };
-
-        render(<Results {...mockData} />);
-
-        const receiptText = screen.getByRole('textbox').value;
-        const tableLines = receiptText.split('\n').filter(line =>
-            line.includes('|') || line.includes('+')
-        );
-
-        // Expected centered content
-        expect(tableLines[1]).toMatch(/\| *Item *\| *Alexander *\| *Bob *\|/);
-        expect(tableLines[3]).toMatch(/\| *Long Pizza Name *\| *✓ *\| *✓ *\|/);
-
-        // Check that content is actually centered
-        const headerRow = tableLines[1];
-        const headerCells = headerRow.split('|').filter(cell => cell.trim());
-
-        headerCells.forEach(cell => {
-            const trimmed = cell.trim();
-            const leftSpace = cell.indexOf(trimmed);
-            const rightSpace = cell.length - trimmed.length - leftSpace;
-            // Allow for off-by-one in odd-length strings
-            expect(Math.abs(leftSpace - rightSpace)).toBeLessThanOrEqual(1);
-        });
     });
     });
