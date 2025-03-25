@@ -86,6 +86,202 @@ describe('PersonsInput', () => {
             ])
         );
     });
+
+    it('calculates splits correctly with percentage discount', () => {
+        const mockSetPersonsList = jest.fn();
+        const mockSetItemSplits = jest.fn();
+        const mockSetStep = jest.fn();
+        const mockSetError = jest.fn();
+
+        const mockPropsWithDiscount = {
+            persons: 'Alice, Bob',
+            setPersons: jest.fn(),
+            setPersonsList: mockSetPersonsList,
+            setStep: mockSetStep,
+            goToStep: jest.fn(),
+            editingPrices: true,
+            receipt: {
+                ocr_contents: {
+                    items: [{ price: 100 }, { price: 200 }],
+                    total_order_bill_details: {
+                        taxes: [{ name: 'GST', amount: 30 }]
+                    }
+                }
+            },
+            editedItems: [
+                { name: 'Item1', price: 100 },
+                { name: 'Item2', price: 200 }
+            ],
+            editedTaxes: [
+                { name: 'GST', amount: 30 }
+            ],
+            discountType: 'percentage',
+            discountValue: '10',
+            setError: mockSetError,
+            setItemSplits: mockSetItemSplits
+        };
+
+        const { getByText } = render(<PersonsInput {...mockPropsWithDiscount} />);
+
+        const continueButton = getByText('Continue');
+        fireEvent.click(continueButton);
+
+        // Verify that the splits are calculated correctly
+        expect(mockSetItemSplits).toHaveBeenCalled();
+        const updatedSplits = mockSetItemSplits.mock.calls[0][0];
+
+        // Check item splits
+        expect(updatedSplits[0]).toEqual({
+            item_name: 'Item1',
+            price: 100,
+            contributors: { Alice: 50, Bob: 50 },
+            useCustomAmounts: false,
+            isItem: true
+        });
+        expect(updatedSplits[1]).toEqual({
+            item_name: 'Item2',
+            price: 200,
+            contributors: { Alice: 100, Bob: 100 },
+            useCustomAmounts: false,
+            isItem: true
+        });
+
+        // Check tax splits
+        expect(updatedSplits[2]).toEqual({
+            item_name: 'GST (Tax/Fee)',
+            price: 30,
+            contributors: { Alice: 15, Bob: 15 },
+            useCustomAmounts: false,
+            isTax: true
+        });
+
+        // Check discount split
+        expect(updatedSplits[3]).toEqual({
+            item_name: 'Discount (10%)',
+            price: -33,
+            contributors: { Alice: -16.5, Bob: -16.5 },
+            useCustomAmounts: false,
+            isDiscount: true
+        });
+
+        // Verify step is updated
+        expect(mockSetStep).toHaveBeenCalledWith(3);
+    });
+
+    it('calculates splits correctly with absolute discount', () => {
+        const mockSetPersonsList = jest.fn();
+        const mockSetItemSplits = jest.fn();
+        const mockSetStep = jest.fn();
+        const mockSetError = jest.fn();
+
+        const absoluteDiscountProps = {
+            persons: 'Alice, Bob',
+            setPersons: jest.fn(),
+            setPersonsList: mockSetPersonsList,
+            setStep: mockSetStep,
+            goToStep: jest.fn(),
+            editingPrices: true,
+            receipt: {
+                ocr_contents: {
+                    items: [{ price: 100 }, { price: 200 }],
+                    total_order_bill_details: {
+                        taxes: [{ name: 'GST', amount: 30 }]
+                    }
+                }
+            },
+            editedItems: [
+                { name: 'Item1', price: 100 },
+                { name: 'Item2', price: 200 }
+            ],
+            editedTaxes: [
+                { name: 'GST', amount: 30 }
+            ],
+            discountType: 'absolute',
+            discountValue: '50',
+            setError: mockSetError,
+            setItemSplits: mockSetItemSplits
+        };
+
+        const { getByText } = render(<PersonsInput {...absoluteDiscountProps} />);
+
+        const continueButton = getByText('Continue');
+        fireEvent.click(continueButton);
+
+        // Verify that the splits are calculated correctly
+        expect(mockSetItemSplits).toHaveBeenCalled();
+        const updatedSplits = mockSetItemSplits.mock.calls[0][0];
+
+        // Check discount split
+        expect(updatedSplits[3]).toEqual({
+            item_name: 'Discount ',
+            price: -50,
+            contributors: { Alice: -25, Bob: -25 },
+            useCustomAmounts: false,
+            isDiscount: true
+        });
+    });
+
+    it('shows error when no persons are entered', () => {
+        const mockSetPersonsList = jest.fn();
+        const mockSetItemSplits = jest.fn();
+        const mockSetStep = jest.fn();
+        const mockSetError = jest.fn();
+
+        const mockPropsWithNoPersons = {
+            persons: '',
+            setPersons: jest.fn(),
+            setPersonsList: mockSetPersonsList,
+            setStep: mockSetStep,
+            goToStep: jest.fn(),
+            editingPrices: true,
+            receipt: {
+                ocr_contents: {
+                    items: [{ price: 100 }, { price: 200 }],
+                    total_order_bill_details: {
+                        taxes: [{ name: 'GST', amount: 30 }]
+                    }
+                }
+            },
+            editedItems: [
+                { name: 'Item1', price: 100 },
+                { name: 'Item2', price: 200 }
+            ],
+            editedTaxes: [
+                { name: 'GST', amount: 30 }
+            ],
+            discountType: 'percentage',
+            discountValue: '10',
+            setError: mockSetError,
+            setItemSplits: mockSetItemSplits
+        };
+
+        const { getByText } = render(<PersonsInput {...mockPropsWithNoPersons} />);
+
+        const continueButton = getByText('Continue');
+        fireEvent.click(continueButton);
+
+        // Verify error is set
+        expect(mockSetError).toHaveBeenCalledWith('Please enter at least one person');
+    });
+
+    it('shows error when invalid names are entered', () => {
+        const mockSetError = jest.fn();
+
+        const mockPropsWithInvalidNames = {
+            ...mockProps,
+            persons: ' ',
+            setError: mockSetError
+        };
+
+        render(<PersonsInput {...mockPropsWithInvalidNames} />);
+
+        const continueButton = screen.getByRole('button', { name: /Continue/i });
+        fireEvent.click(continueButton);
+
+        // Verify error is set
+        expect(mockSetError).toHaveBeenCalledWith('Please enter at least one person');
+        expect(mockProps.setPersonsList).not.toHaveBeenCalled();
+    });
 });
 
 describe('PersonsInput - Receipt Editing Warnings', () => {
