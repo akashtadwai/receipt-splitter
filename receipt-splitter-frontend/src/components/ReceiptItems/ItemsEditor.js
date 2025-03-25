@@ -1,11 +1,20 @@
 import React from 'react';
 
-const ItemsEditor = ({ editedItems, editingPrices, handlePriceChange }) => {
+const ItemsEditor = ({ editedItems, editingPrices, handlePriceChange, handleNameChange }) => {
     return (
         <>
             {editedItems.map((item, index) => (
                 <div key={index} className="p-3 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors flex justify-between items-center">
-                    <p className="font-medium text-indigo-900">{item.name}</p>
+                    {editingPrices ? (
+                        <input
+                            type="text"
+                            value={item.name}
+                            onChange={(e) => handleNameChange(index, e.target.value)}
+                            className="flex-1 p-1 border border-indigo-300 rounded focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                        />
+                    ) : (
+                        <p className="font-medium text-indigo-900">{item.name}</p>
+                    )}
                     {editingPrices ? (
                         <input
                             type="number"

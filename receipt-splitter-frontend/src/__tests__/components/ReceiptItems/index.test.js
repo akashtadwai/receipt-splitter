@@ -54,7 +54,7 @@ describe('ReceiptItems', () => {
     it('toggles edit mode when edit button is clicked', () => {
         render(<ReceiptItems {...mockProps} />);
 
-        const editButton = screen.getByText('Edit Prices');
+        const editButton = screen.getByText('Edit Prices/Names');
         fireEvent.click(editButton);
 
         expect(mockProps.setEditingPrices).toHaveBeenCalledWith(true);
@@ -136,5 +136,18 @@ describe('ReceiptItems', () => {
 
         // Should show % sign and the discount input
         expect(screen.getByText('%')).toBeInTheDocument();
+    });
+    
+    it('allows editing item names', () => {
+        render(<ReceiptItems {...mockProps} editingPrices={true} />);
+
+        // Simulate editing the name of the first item
+        const nameInputs = screen.getAllByRole('textbox');
+        fireEvent.change(nameInputs[0], { target: { value: 'Updated Item 1' } });
+
+        // Verify that the handleNameChange function was called with the correct arguments
+        expect(mockProps.setEditedItems).toHaveBeenCalled();
+        const updatedItems = mockProps.setEditedItems.mock.calls[0][0];
+        expect(updatedItems[0].name).toBe('Updated Item 1');
     });
 });

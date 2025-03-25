@@ -52,7 +52,7 @@ const ReceiptItems = ({
                                 : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'
                                 }`}
                         >
-                            {editingPrices ? 'Reset to Original' : 'Edit Prices'}
+                            {editingPrices ? 'Reset to Original' : 'Edit Prices/Names'}
                         </button>
                     </div>
 
@@ -61,6 +61,11 @@ const ReceiptItems = ({
                             editedItems={editedItems}
                             editingPrices={editingPrices}
                             handlePriceChange={handlePriceChange}
+                            handleNameChange={(index, newName) => {
+                                const updatedItems = [...editedItems];
+                                updatedItems[index].name = newName;
+                                setEditedItems(updatedItems);
+                            }}
                         />
 
                         <TaxesEditor

@@ -21,16 +21,26 @@ describe('ItemsEditor', () => {
     });
 
     it('allows price editing when enabled', () => {
-        const { container } = render(
+        const mockEditedItems = [
+            { name: 'Item1', price: 100 },
+            { name: 'Item2', price: 200 }
+        ];
+        const mockHandlePriceChange = jest.fn();
+
+        const { getAllByRole } = render(
             <ItemsEditor
                 editedItems={mockEditedItems}
                 editingPrices={true}
                 handlePriceChange={mockHandlePriceChange}
+                handleNameChange={jest.fn()}
             />
         );
 
-        const input = container.querySelector('input');
-        fireEvent.change(input, { target: { value: '150' } });
+        // Simulate editing the price of the first item
+        const priceInputs = getAllByRole('spinbutton');
+        fireEvent.change(priceInputs[0], { target: { value: '150' } });
+
+        // Verify that the handlePriceChange function was called with the correct arguments
         expect(mockHandlePriceChange).toHaveBeenCalledWith(0, '150');
     });
 });

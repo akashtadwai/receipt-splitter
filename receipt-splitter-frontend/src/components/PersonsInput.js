@@ -34,7 +34,7 @@ const PersonsInput = ({
         editedItems.forEach(item => {
             const price = item.price === '' ? 0 : parseFloat(item.price) || 0;
             updatedSplits.push({
-                item_name: item.name,
+                item_name: item.name, // Use updated name
                 price: price,
                 contributors: Object.fromEntries(
                     newPersonsList.map(person => [person, price / newPersonsList.length])

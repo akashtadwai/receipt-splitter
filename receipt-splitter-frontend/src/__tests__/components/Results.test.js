@@ -145,4 +145,20 @@ describe('Results', () => {
         // Clean up timers
         jest.useRealTimers();
     });
+
+    it('updates receipt text with edited item names', () => {
+        const updatedMockItemSplits = [
+            { isItem: true, item_name: 'Updated Item1', price: 10, contributors: { 'Alice': 10 } },
+            { isTax: true, item_name: 'Updated Tax1', price: 2, contributors: { 'Alice': 2 } },
+            { isDiscount: true, item_name: 'Updated Discount1', price: -1, contributors: { 'Alice': -1 } }
+        ];
+
+        render(<Results {...mockProps} itemSplits={updatedMockItemSplits} />);
+
+        const receiptText = screen.getByRole('textbox').value;
+
+        expect(receiptText).toContain('Updated Item1: ₹10.00');
+        expect(receiptText).toContain('Updated Tax1: ₹2.00');
+        expect(receiptText).toContain('Updated Discount1: ₹-1.00');
+    });
     });
