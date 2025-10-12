@@ -15,6 +15,22 @@ class LanguageMeta(Enum.__class__):
 class Language(Enum, metaclass=LanguageMeta):
     pass
 
+class Tax(BaseModel):
+    name: str
+    amount: float
+
+class Item(BaseModel):
+    name: str
+    price: float
+
+class TotalBillDetails(BaseModel):
+    total_bill: float
+    taxes: List[Tax]
+
+class OCRContents(BaseModel):
+    items: List[Item]
+    total_order_bill_details: TotalBillDetails
+
 # API Models
 class StructuredOCR(BaseModel):
     is_receipt: bool
@@ -22,4 +38,4 @@ class StructuredOCR(BaseModel):
     file_name: str
     topics: list[str]
     languages: list[Language]
-    ocr_contents: dict
+    ocr_contents: OCRContents
