@@ -15,7 +15,11 @@ const ReceiptUpload = ({
     imagePreview,
     setImagePreview
 }) => {
-    const API_URL = process.env.REACT_APP_API_URL || '';
+    // Use Cloudflare Worker URL - update this after first deployment
+    // For local development with wrangler dev, use http://localhost:8787
+    const API_URL = process.env.NODE_ENV === 'development'
+        ? 'http://localhost:8787'
+        : 'https://receipt-splitter-api.akash-tadwai.workers.dev';
 
     const handleFileChange = (e) => {
         if (e.target.files.length > 0) {

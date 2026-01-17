@@ -112,4 +112,102 @@ describe('ReceiptUpload', () => {
             expect(mockProps.setIsLoading).toHaveBeenCalledWith(false);
         });
     });
+
+    it('calls the correct API endpoint for receipt processing', async () => {
+        global.fetch.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({
+                ocr_contents: {
+                    items: [{ name: 'Test Item', price: 100 }],
+                    total_order_bill_details: { taxes: [] }
+                }
+            })
+        });
+
+        const props = {
+            ...mockProps,
+            file: new File(['dummy content'], 'receipt.jpg', { type: 'image/jpeg' })
+        };
+
+        render(<ReceiptUpload {...props} />);
+
+        const processButton = screen.getByText('Process Receipt');
+        fireEvent.click(processButton);
+
+        await waitFor(() => {
+            // Verify fetch was called with /process-receipt endpoint
+            const fetchCall = global.fetch.mock.calls[0];
+            expect(fetchCall[0]).toContain('/process-receipt');
+            expect(fetchCall[1].method).toBe('POST');
+            expect(fetchCall[1].body).toBeInstanceOf(FormData);
+        });
+    });
+
+    it('handles receipts with no taxes gracefully', async () => {
+        global.fetch.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({
+                ocr_contents: {
+                    items: [{ name: 'Coffee', price: 5.50 }],
+                    total_order_bill_details: {
+                        total_bill: 5.50,
+                        taxes: null  // API might return null instead of empty array
+                    }
+                }
+            })
+        });
+
+        const props = {
+            ...mockProps,
+            file: new File(['receipt'], 'receipt.png', { type: 'image/png' })
+        };
+
+        render(<ReceiptUpload {...props} />);
+        fireEvent.click(screen.getByText('Process Receipt'));
+
+        await waitFor(() => {
+            expect(mockProps.setEditedTaxes).toHaveBeenCalledWith([]);
+            expect(mockProps.setStep).toHaveBeenCalledWith(2);
+        });
+    });
+
+    it('handles network failure during upload', async () => {
+        global.fetch.mockRejectedValueOnce(new Error('Network error'));
+
+        const props = {
+            ...mockProps,
+            file: new File(['content'], 'test.jpg', { type: 'image/jpeg' })
+        };
+
+        render(<ReceiptUpload {...props} />);
+        fireEvent.click(screen.getByText('Process Receipt'));
+
+        await waitFor(() => {
+            expect(mockProps.setError).toHaveBeenCalledWith('Error processing receipt: Network error');
+            expect(mockProps.setIsLoading).toHaveBeenCalledWith(false);
+        });
+    });
+
+    it('sends file in FormData with correct field name', async () => {
+        global.fetch.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({
+                ocr_contents: {
+                    items: [],
+                    total_order_bill_details: { taxes: [] }
+                }
+            })
+        });
+
+        const testFile = new File(['image data'], 'my-receipt.jpg', { type: 'image/jpeg' });
+        const props = { ...mockProps, file: testFile };
+
+        render(<ReceiptUpload {...props} />);
+        fireEvent.click(screen.getByText('Process Receipt'));
+
+        await waitFor(() => {
+            const formData = global.fetch.mock.calls[0][1].body;
+            expect(formData.get('file')).toBe(testFile);
+        });
+    });
 });

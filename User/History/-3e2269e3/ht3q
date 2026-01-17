@@ -47,12 +47,3 @@ yarn-error.log*
 
 # Cloudflare Worker local secrets
 .dev.vars
-
-# Antigravity/Chromium data
-Backups/
-Cache/
-CachedData/
-Code Cache/
-GPUCache/
-Local Storage/
-*.lock

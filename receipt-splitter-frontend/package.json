@@ -2,6 +2,7 @@
   "name": "bill-iant",
   "version": "0.1.0",
   "private": true,
+  "homepage": "https://akashtadwai.github.io/receipt-splitter",
   "dependencies": {
     "@testing-library/dom": "^10.4.0",
     "react": "^18.3.1",
