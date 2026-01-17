@@ -12,95 +12,88 @@ import useReceiptCalculator from './components/hooks/useReceiptCalculator';
 
 function App() {
   const {
-    receipt,
-    setReceipt,
-    persons,
-    setPersons,
-    personsList,
-    setPersonsList,
-    itemSplits,
-    setItemSplits,
+    // Multi-receipt state
+    files, setFiles,
+    imagePreviews, setImagePreviews,
+    receipts, setReceipts,
+    receiptData, setReceiptData,
+
+    // Shared state
+    persons, setPersons,
+    personsList, setPersonsList,
+    itemSplits, setItemSplits,
     results,
-    step,
-    setStep,
-    file,
-    setFile,
-    isLoading,
-    setIsLoading,
-    error,
-    setError,
-    imagePreview,
-    setImagePreview,
-    editingPrices,
-    setEditingPrices,
-    editedItems,
-    setEditedItems,
-    editedTaxes,
-    setEditedTaxes,
-    discountType,
-    setDiscountType,
-    discountValue,
-    setDiscountValue,
+    step, setStep,
+    isLoading, setIsLoading,
+    error, setError,
+    editingPrices, setEditingPrices,
+
+    // Calculations
+    calculateReceiptTotal,
     calculateCurrentTotal,
+
+    // Per-receipt actions
     handlePriceChange,
+    handleNameChange,
     handleTaxChange,
     handleTaxNameChange,
     addNewTax,
     removeTax,
+    setReceiptDiscount,
+    removeReceipt,
+
+    // Split actions
     toggleContributor,
     toggleCustomAmounts,
     handleCustomAmountChange,
     validateCustomAmounts,
     toggleAllContributors,
     calculateSplit,
+
+    // Navigation
     resetApp,
     goToStep
   } = useReceiptCalculator();
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 p-4 md:p-8">
-      <div className="max-w-4xl mx-auto bg-white rounded-xl shadow-lg p-6">
+      <div className="max-w-5xl mx-auto bg-white rounded-xl shadow-lg p-6">
         <h1 className="text-3xl font-bold text-center text-indigo-700 mb-6">Receipt Splitter</h1>
 
         <StepsIndicator currentStep={step} goToStep={goToStep} />
 
         {step === 1 && (
           <ReceiptUpload
-            setReceipt={setReceipt}
-            setEditedItems={setEditedItems}
-            setEditedTaxes={setEditedTaxes}
-            setItemSplits={setItemSplits}
+            files={files}
+            setFiles={setFiles}
+            imagePreviews={imagePreviews}
+            setImagePreviews={setImagePreviews}
+            setReceipts={setReceipts}
+            setReceiptData={setReceiptData}
             setStep={setStep}
             setError={setError}
             isLoading={isLoading}
             setIsLoading={setIsLoading}
-            file={file}
-            setFile={setFile}
-            imagePreview={imagePreview}
-            setImagePreview={setImagePreview}
           />
         )}
 
-        {step === 2 && receipt && (
+        {step === 2 && receiptData.length > 0 && (
           <>
             <ReceiptItems
-              imagePreview={imagePreview}
+              imagePreviews={imagePreviews}
+              receiptData={receiptData}
               editingPrices={editingPrices}
               setEditingPrices={setEditingPrices}
-              editedItems={editedItems}
-              setEditedItems={setEditedItems}
-              editedTaxes={editedTaxes}
-              setEditedTaxes={setEditedTaxes}
-              discountType={discountType}
-              setDiscountType={setDiscountType}
-              discountValue={discountValue}
-              setDiscountValue={setDiscountValue}
+              calculateReceiptTotal={calculateReceiptTotal}
               calculateCurrentTotal={calculateCurrentTotal}
               handlePriceChange={handlePriceChange}
+              handleNameChange={handleNameChange}
               handleTaxChange={handleTaxChange}
               handleTaxNameChange={handleTaxNameChange}
               addNewTax={addNewTax}
               removeTax={removeTax}
+              setReceiptDiscount={setReceiptDiscount}
+              removeReceipt={removeReceipt}
             />
 
             <PersonsInput
@@ -110,11 +103,7 @@ function App() {
               setStep={setStep}
               goToStep={goToStep}
               editingPrices={editingPrices}
-              receipt={receipt}
-              editedItems={editedItems}
-              editedTaxes={editedTaxes}
-              discountType={discountType}
-              discountValue={discountValue}
+              receiptData={receiptData}
               setError={setError}
               setItemSplits={setItemSplits}
             />
@@ -135,8 +124,7 @@ function App() {
             setError={setError}
           />
         )}
-      {// also add total bill in step-4 results so that they are copy pastable in the end
-      }
+
         {step === 4 && results && (
           <Results
             results={results}

@@ -7,11 +7,7 @@ const PersonsInput = ({
     setStep,
     goToStep,
     editingPrices,
-    receipt,
-    editedItems,
-    editedTaxes,
-    discountType,
-    discountValue,
+    receiptData,
     setError,
     setItemSplits
 }) => {
@@ -27,64 +23,75 @@ const PersonsInput = ({
         }
         setPersonsList(newPersonsList);
 
-        // Use edited prices and taxes if in editing mode
+        // Combine all items and taxes from all receipts
         const updatedSplits = [];
 
-        // Add items with potentially edited prices
-        editedItems.forEach(item => {
-            const price = item.price === '' ? 0 : parseFloat(item.price) || 0;
-            updatedSplits.push({
-                item_name: item.name, // Use updated name
-                price: price,
-                contributors: Object.fromEntries(
-                    newPersonsList.map(person => [person, price / newPersonsList.length])
-                ),
-                useCustomAmounts: false,
-                isItem: true
+        receiptData.forEach((data, receiptIndex) => {
+            // Add items from this receipt
+            data.items.forEach(item => {
+                const price = item.price === '' ? 0 : parseFloat(item.price) || 0;
+                updatedSplits.push({
+                    item_name: item.name,
+                    price: price,
+                    contributors: Object.fromEntries(
+                        newPersonsList.map(person => [person, price / newPersonsList.length])
+                    ),
+                    useCustomAmounts: false,
+                    isItem: true,
+                    receiptIndex
+                });
             });
-        });
 
-        // Add taxes with potentially edited amounts
-        editedTaxes.forEach(tax => {
-            const amount = tax.amount === '' ? 0 : parseFloat(tax.amount) || 0;
-            updatedSplits.push({
-                item_name: `${tax.name} (Tax/Fee)`,
-                price: amount,
-                contributors: Object.fromEntries(
-                    newPersonsList.map(person => [person, amount / newPersonsList.length])
-                ),
-                useCustomAmounts: false,
-                isTax: true
+            // Add taxes from this receipt
+            data.taxes.forEach(tax => {
+                const amount = tax.amount === '' ? 0 : parseFloat(tax.amount) || 0;
+                updatedSplits.push({
+                    item_name: `${tax.name} (Tax/Fee)`,
+                    price: amount,
+                    contributors: Object.fromEntries(
+                        newPersonsList.map(person => [person, amount / newPersonsList.length])
+                    ),
+                    useCustomAmounts: false,
+                    isTax: true,
+                    receiptIndex
+                });
             });
-        });
 
-        // If there's a discount applied, add it as a negative item
-        if ((discountType === 'percentage' && parseFloat(discountValue) > 0) ||
-            (discountType === 'absolute' && parseFloat(discountValue) > 0)) {
-            const originalTotal = editedItems.reduce((sum, item) => sum + (parseFloat(item.price) || 0), 0) +
-                editedTaxes.reduce((sum, tax) => sum + (parseFloat(tax.amount) || 0), 0);
+            // Add per-receipt discount if applicable
+            if ((data.discountType === 'percentage' && parseFloat(data.discountValue) > 0) ||
+                (data.discountType === 'absolute' && parseFloat(data.discountValue) > 0)) {
 
-            let discountAmount = 0;
-            if (discountType === 'percentage') {
-                discountAmount = originalTotal * (parseFloat(discountValue) / 100);
-            } else {
-                discountAmount = parseFloat(discountValue);
+                const originalTotal = data.items.reduce((sum, item) => sum + (parseFloat(item.price) || 0), 0) +
+                    data.taxes.reduce((sum, tax) => sum + (parseFloat(tax.amount) || 0), 0);
+
+                let discountAmount = 0;
+                if (data.discountType === 'percentage') {
+                    discountAmount = originalTotal * (parseFloat(data.discountValue) / 100);
+                } else {
+                    discountAmount = parseFloat(data.discountValue);
+                }
+
+                updatedSplits.push({
+                    item_name: `Discount ${receiptData.length > 1 ? `(Receipt ${receiptIndex + 1})` : ''} ${data.discountType === 'percentage' ? `(${data.discountValue}%)` : ''}`.trim(),
+                    price: -discountAmount,
+                    contributors: Object.fromEntries(
+                        newPersonsList.map(person => [person, -discountAmount / newPersonsList.length])
+                    ),
+                    useCustomAmounts: false,
+                    isDiscount: true,
+                    receiptIndex
+                });
             }
-
-            updatedSplits.push({
-                item_name: `Discount ${discountType === 'percentage' ? `(${discountValue}%)` : ''}`,
-                price: -discountAmount,
-                contributors: Object.fromEntries(
-                    newPersonsList.map(person => [person, -discountAmount / newPersonsList.length])
-                ),
-                useCustomAmounts: false,
-                isDiscount: true
-            });
-        }
+        });
 
         setItemSplits(updatedSplits);
         setStep(3);
     };
+
+    const hasEdits = editingPrices && receiptData.some(data =>
+        data.discountType !== 'none' ||
+        data.items.some(item => item.price === '' || item.name === '')
+    );
 
     return (
         <div className="mt-6 p-5 border border-indigo-200 rounded-lg bg-indigo-50">
@@ -112,23 +119,11 @@ const PersonsInput = ({
                 </button>
             </div>
 
-            {editingPrices && (
-                editedItems.some((item, i) =>
-                    item.price !== receipt.ocr_contents.items[i].price ||
-                    (item.price === '' && receipt.ocr_contents.items[i].price !== 0)
-                ) ||
-                editedTaxes.length !== receipt.ocr_contents.total_order_bill_details.taxes.length ||
-                editedTaxes.some((tax, i) =>
-                    i < receipt.ocr_contents.total_order_bill_details.taxes.length &&
-                    (tax.amount !== receipt.ocr_contents.total_order_bill_details.taxes[i].amount ||
-                        tax.name !== receipt.ocr_contents.total_order_bill_details.taxes[i].name)
-                ) ||
-                discountType !== 'none'
-            ) && (
-                    <p className="mt-2 text-amber-600 text-sm">
-                        ⚠️ You've edited the receipt. Make sure your total looks correct before continuing.
-                    </p>
-                )}
+            {hasEdits && (
+                <p className="mt-2 text-amber-600 text-sm">
+                    ⚠️ You've edited the receipt(s). Make sure your totals look correct before continuing.
+                </p>
+            )}
         </div>
     );
 };

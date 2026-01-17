@@ -58,3 +58,5 @@ logs/
 GPUCache/
 Local Storage/
 *.lock
+Network Persistent State
+Session Storage/

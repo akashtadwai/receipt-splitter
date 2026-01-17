@@ -1,95 +1,170 @@
 import { useState } from 'react';
 
 const useReceiptCalculator = () => {
-    const API_URL = process.env.REACT_APP_API_URL || '';
-    const [receipt, setReceipt] = useState(null);
+    // Multi-receipt state - arrays instead of single values
+    const [files, setFiles] = useState([]);
+    const [imagePreviews, setImagePreviews] = useState([]);
+    const [receipts, setReceipts] = useState([]);
+
+    // Per-receipt data: { items: [], taxes: [], discountType: 'none', discountValue: 0 }
+    const [receiptData, setReceiptData] = useState([]);
+
+    // Shared state
     const [persons, setPersons] = useState('');
     const [personsList, setPersonsList] = useState([]);
     const [itemSplits, setItemSplits] = useState([]);
     const [results, setResults] = useState(null);
     const [step, setStep] = useState(1);
-    const [file, setFile] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
-    const [imagePreview, setImagePreview] = useState(null);
-
-    // Editing state
     const [editingPrices, setEditingPrices] = useState(false);
-    const [editedItems, setEditedItems] = useState([]);
-    const [editedTaxes, setEditedTaxes] = useState([]);
 
-    // Discount state
-    const [discountType, setDiscountType] = useState('none'); // 'none', 'percentage', 'absolute'
-    const [discountValue, setDiscountValue] = useState(0);
+    // Calculate total for a single receipt
+    const calculateReceiptTotal = (receiptIndex) => {
+        const data = receiptData[receiptIndex];
+        if (!data) return 0;
 
-    // Calculate current total after edits and discount
-    const calculateCurrentTotal = () => {
-        const itemsTotal = editedItems.reduce((sum, item) => {
+        const itemsTotal = data.items.reduce((sum, item) => {
             const price = item.price === '' ? 0 : parseFloat(item.price) || 0;
             return sum + price;
         }, 0);
 
-        const taxesTotal = editedTaxes.reduce((sum, tax) => {
+        const taxesTotal = data.taxes.reduce((sum, tax) => {
             const amount = tax.amount === '' ? 0 : parseFloat(tax.amount) || 0;
             return sum + amount;
         }, 0);
 
         let total = itemsTotal + taxesTotal;
 
-        // Apply discount if any
-        if (discountType === 'percentage' && discountValue) {
-            total = total * (1 - (parseFloat(discountValue) / 100));
-        } else if (discountType === 'absolute' && discountValue) {
-            total = total - parseFloat(discountValue);
+        // Apply per-receipt discount
+        if (data.discountType === 'percentage' && data.discountValue) {
+            total = total * (1 - (parseFloat(data.discountValue) / 100));
+        } else if (data.discountType === 'absolute' && data.discountValue) {
+            total = total - parseFloat(data.discountValue);
         }
 
-        // Ensure total is not negative
         return Math.max(total, 0);
     };
 
-    // Update item price
-    const handlePriceChange = (index, newPrice) => {
-        const updatedItems = [...editedItems];
-        if (newPrice === '') {
-            updatedItems[index].price = '';
-        } else {
-            updatedItems[index].price = parseFloat(newPrice) || 0;
-        }
-        setEditedItems(updatedItems);
+    // Calculate combined total across all receipts
+    const calculateCurrentTotal = () => {
+        return receiptData.reduce((sum, _, index) => sum + calculateReceiptTotal(index), 0);
     };
 
-    // Update tax amount
-    const handleTaxChange = (index, newAmount) => {
-        const updatedTaxes = [...editedTaxes];
-        if (newAmount === '') {
-            updatedTaxes[index].amount = '';
-        } else {
-            updatedTaxes[index].amount = parseFloat(newAmount) || 0;
-        }
-        setEditedTaxes(updatedTaxes);
+    // Get all items across all receipts (for split calculation)
+    const getAllItems = () => {
+        return receiptData.flatMap((data, receiptIndex) =>
+            data.items.map(item => ({
+                ...item,
+                receiptIndex // Track which receipt this item belongs to
+            }))
+        );
     };
 
-    // Add a new tax
-    const addNewTax = () => {
-        const newTax = {
-            name: "New Tax/Fee",
-            amount: 0
-        };
-        setEditedTaxes([...editedTaxes, newTax]);
+    // Get all taxes across all receipts
+    const getAllTaxes = () => {
+        return receiptData.flatMap((data, receiptIndex) =>
+            data.taxes.map(tax => ({
+                ...tax,
+                receiptIndex
+            }))
+        );
     };
 
-    // Update tax name
-    const handleTaxNameChange = (index, newName) => {
-        const updatedTaxes = [...editedTaxes];
-        updatedTaxes[index].name = newName;
-        setEditedTaxes(updatedTaxes);
+    // Update item price for a specific receipt
+    const handlePriceChange = (receiptIndex, itemIndex, newPrice) => {
+        setReceiptData(prev => {
+            const updated = [...prev];
+            const items = [...updated[receiptIndex].items];
+            items[itemIndex] = {
+                ...items[itemIndex],
+                price: newPrice === '' ? '' : (parseFloat(newPrice) || 0)
+            };
+            updated[receiptIndex] = { ...updated[receiptIndex], items };
+            return updated;
+        });
     };
 
-    // Remove a tax
-    const removeTax = (index) => {
-        const updatedTaxes = [...editedTaxes];
-        updatedTaxes.splice(index, 1);
-        setEditedTaxes(updatedTaxes);
+    // Update item name for a specific receipt
+    const handleNameChange = (receiptIndex, itemIndex, newName) => {
+        setReceiptData(prev => {
+            const updated = [...prev];
+            const items = [...updated[receiptIndex].items];
+            items[itemIndex] = { ...items[itemIndex], name: newName };
+            updated[receiptIndex] = { ...updated[receiptIndex], items };
+            return updated;
+        });
+    };
+
+    // Update tax amount for a specific receipt
+    const handleTaxChange = (receiptIndex, taxIndex, newAmount) => {
+        setReceiptData(prev => {
+            const updated = [...prev];
+            const taxes = [...updated[receiptIndex].taxes];
+            taxes[taxIndex] = {
+                ...taxes[taxIndex],
+                amount: newAmount === '' ? '' : (parseFloat(newAmount) || 0)
+            };
+            updated[receiptIndex] = { ...updated[receiptIndex], taxes };
+            return updated;
+        });
+    };
+
+    // Update tax name for a specific receipt
+    const handleTaxNameChange = (receiptIndex, taxIndex, newName) => {
+        setReceiptData(prev => {
+            const updated = [...prev];
+            const taxes = [...updated[receiptIndex].taxes];
+            taxes[taxIndex] = { ...taxes[taxIndex], name: newName };
+            updated[receiptIndex] = { ...updated[receiptIndex], taxes };
+            return updated;
+        });
+    };
+
+    // Add a new tax to a specific receipt
+    const addNewTax = (receiptIndex) => {
+        setReceiptData(prev => {
+            const updated = [...prev];
+            updated[receiptIndex] = {
+                ...updated[receiptIndex],
+                taxes: [...updated[receiptIndex].taxes, { name: "New Tax/Fee", amount: 0 }]
+            };
+            return updated;
+        });
+    };
+
+    // Remove a tax from a specific receipt
+    const removeTax = (receiptIndex, taxIndex) => {
+        setReceiptData(prev => {
+            const updated = [...prev];
+            const taxes = [...updated[receiptIndex].taxes];
+            taxes.splice(taxIndex, 1);
+            updated[receiptIndex] = { ...updated[receiptIndex], taxes };
+            return updated;
+        });
+    };
+
+    // Update discount for a specific receipt
+    const setReceiptDiscount = (receiptIndex, discountType, discountValue) => {
+        setReceiptData(prev => {
+            const updated = [...prev];
+            updated[receiptIndex] = { ...updated[receiptIndex], discountType, discountValue };
+            return updated;
+        });
+    };
+
+    // Remove a receipt
+    const removeReceipt = (receiptIndex) => {
+        setFiles(prev => prev.filter((_, i) => i !== receiptIndex));
+        setImagePreviews(prev => {
+            const removed = prev[receiptIndex];
+            if (removed && removed.startsWith('blob:')) {
+                URL.revokeObjectURL(removed);
+            }
+            return prev.filter((_, i) => i !== receiptIndex);
+        });
+        setReceipts(prev => prev.filter((_, i) => i !== receiptIndex));
+        setReceiptData(prev => prev.filter((_, i) => i !== receiptIndex));
     };
 
     const toggleContributor = (itemIndex, person) => {
@@ -98,9 +173,7 @@ const useReceiptCalculator = () => {
         if (!item.useCustomAmounts) {
             const newContributors = { ...item.contributors };
             if (newContributors[person]) {
-                // Remove person from contributors
                 delete newContributors[person];
-                // Add this block to recalculate shares after removing a person
                 const remainingContributors = Object.keys(newContributors).length;
                 if (remainingContributors > 0) {
                     const newShare = item.price / remainingContributors;
@@ -109,17 +182,14 @@ const useReceiptCalculator = () => {
                     });
                 }
             } else {
-                // Add person to contributors
                 const contributorCount = Object.keys(newContributors).length + 1;
                 newContributors[person] = item.price / contributorCount;
-                // Recalculate equal shares
                 Object.keys(newContributors).forEach(p => {
                     newContributors[p] = item.price / contributorCount;
                 });
             }
             updatedSplits[itemIndex].contributors = newContributors;
         } else {
-            // For custom amounts, just toggle inclusion (set to 0 if adding)
             if (item.contributors[person] !== undefined) {
                 const newContributors = { ...item.contributors };
                 delete newContributors[person];
@@ -140,7 +210,6 @@ const useReceiptCalculator = () => {
         const useCustom = !item.useCustomAmounts;
         updatedSplits[itemIndex].useCustomAmounts = useCustom;
         if (!useCustom) {
-            // Switch back to equal splitting
             const contributors = Object.keys(item.contributors);
             const contributorCount = contributors.length;
             if (contributorCount > 0) {
@@ -157,7 +226,6 @@ const useReceiptCalculator = () => {
 
     const handleCustomAmountChange = (itemIndex, person, amount) => {
         const updatedSplits = [...itemSplits];
-        // Allow empty string during editing
         if (amount === '') {
             updatedSplits[itemIndex].contributors[person] = '';
         } else {
@@ -171,34 +239,27 @@ const useReceiptCalculator = () => {
         if (!item.useCustomAmounts) return true;
         const total = Object.values(item.contributors)
             .reduce((sum, amount) => {
-                // Convert empty strings or non-numeric values to 0
                 const numAmount = amount === '' ? 0 : parseFloat(amount) || 0;
                 return sum + numAmount;
             }, 0);
-        return Math.abs(total - item.price) < 0.01; // Allow for small rounding errors
+        return Math.abs(total - item.price) < 0.01;
     };
 
     const toggleAllContributors = (itemIndex) => {
         const updatedSplits = [...itemSplits];
         const item = updatedSplits[itemIndex];
-
-        // Check if all persons are already contributors
         const allSelected = personsList.every(person => item.contributors.hasOwnProperty(person));
 
         if (allSelected) {
-            // If all are selected, deselect all
             updatedSplits[itemIndex].contributors = {};
         } else {
-            // If not all selected, select all
             if (!item.useCustomAmounts) {
-                // For equal splitting
                 const newContributors = {};
                 personsList.forEach(person => {
                     newContributors[person] = item.price / personsList.length;
                 });
                 updatedSplits[itemIndex].contributors = newContributors;
             } else {
-                // For custom amounts
                 const newContributors = {};
                 personsList.forEach(person => {
                     newContributors[person] = 0;
@@ -206,7 +267,6 @@ const useReceiptCalculator = () => {
                 updatedSplits[itemIndex].contributors = newContributors;
             }
         }
-
         setItemSplits(updatedSplits);
     };
 
@@ -216,15 +276,12 @@ const useReceiptCalculator = () => {
             person_totals[person] = 0.0;
         });
 
-        // Calculate the total amount of contributions
         const totalContributions = items.reduce((sum, item) => {
             return sum + Object.values(item.contributors).reduce((itemSum, amount) => itemSum + amount, 0);
         }, 0);
 
-        // Calculate the discount factor
         const discountFactor = receipt_total / totalContributions;
 
-        // Add item costs based on contributions and apply discount
         items.forEach(item => {
             Object.entries(item.contributors).forEach(([person, amount]) => {
                 if (person in person_totals) {
@@ -233,35 +290,30 @@ const useReceiptCalculator = () => {
             });
         });
 
-        // Format the response with rounding (same as backend)
         const breakdown = Object.entries(person_totals).map(([person, amount]) => ({
             person: person,
-            amount: Math.round(amount * 100) / 100 // Round to 2 decimal places
+            amount: Math.round(amount * 100) / 100
         }));
 
-        return {
-            breakdown: breakdown,
-        };
+        return { breakdown };
     };
 
     const calculateSplit = async () => {
-        // First, check if any item has no contributors
         const itemsWithNoContributors = itemSplits
             .map((item, index) => ({ item, index }))
             .filter(({ item }) => Object.keys(item.contributors).length === 0);
 
         if (itemsWithNoContributors.length > 0) {
-            setError(`"${itemsWithNoContributors[0].item.item_name}" has no contributors. At least one person must be selected for each item.`);
+            setError(`"${itemsWithNoContributors[0].item.item_name}" has no contributors.`);
             return;
         }
 
-        // Then check for valid custom amounts
         const invalidItems = itemSplits
             .map((item, index) => ({ item, index }))
             .filter(({ item, index }) => item.useCustomAmounts && !validateCustomAmounts(index));
 
         if (invalidItems.length > 0) {
-            setError(`"${invalidItems[0].item.item_name}" has invalid split amounts. Total must equal ${invalidItems[0].item.price.toFixed(2)}`);
+            setError(`"${invalidItems[0].item.item_name}" has invalid split amounts.`);
             return;
         }
 
@@ -269,20 +321,13 @@ const useReceiptCalculator = () => {
         setError('');
 
         try {
-            // Calculate the total based on edited values and discount
             const calculatedTotal = calculateCurrentTotal();
-
             const itemsForCalculation = itemSplits.map(({ item_name, price, contributors }) => ({
                 item_name,
                 price,
                 contributors
             }));
-            const result = calculatePersonTotals(
-                itemsForCalculation,
-                personsList,
-                calculatedTotal
-            );
-
+            const result = calculatePersonTotals(itemsForCalculation, personsList, calculatedTotal);
             setResults(result);
             setStep(4);
         } catch (err) {
@@ -293,25 +338,24 @@ const useReceiptCalculator = () => {
     };
 
     const resetApp = () => {
-        // Revoke the object URL to avoid memory leaks
-        if (imagePreview && imagePreview.startsWith('blob:')) {
-            URL.revokeObjectURL(imagePreview);
-        }
+        imagePreviews.forEach(preview => {
+            if (preview && preview.startsWith('blob:')) {
+                URL.revokeObjectURL(preview);
+            }
+        });
 
-        setReceipt(null);
+        setFiles([]);
+        setImagePreviews([]);
+        setReceipts([]);
+        setReceiptData([]);
         setPersons('');
         setPersonsList([]);
         setItemSplits([]);
         setResults(null);
         setStep(1);
-        setFile(null);
-        setImagePreview(null);
+        setIsLoading(false);
         setError('');
         setEditingPrices(false);
-        setEditedItems([]);
-        setEditedTaxes([]);
-        setDiscountType('none');
-        setDiscountValue(0);
     };
 
     const goToStep = (targetStep) => {
@@ -321,51 +365,84 @@ const useReceiptCalculator = () => {
         }
     };
 
+    // Initialize itemSplits from all receipts (called when moving to step 3)
+    const initializeItemSplits = () => {
+        const allItems = [];
+
+        receiptData.forEach((data, receiptIndex) => {
+            // Add regular items
+            data.items.forEach(item => {
+                allItems.push({
+                    item_name: item.name,
+                    price: parseFloat(item.price) || 0,
+                    contributors: {},
+                    useCustomAmounts: false,
+                    isItem: true,
+                    receiptIndex
+                });
+            });
+
+            // Add taxes
+            data.taxes.forEach(tax => {
+                allItems.push({
+                    item_name: `${tax.name} (Tax/Fee)`,
+                    price: parseFloat(tax.amount) || 0,
+                    contributors: {},
+                    useCustomAmounts: false,
+                    isTax: true,
+                    receiptIndex
+                });
+            });
+        });
+
+        setItemSplits(allItems);
+    };
+
     return {
-        receipt,
-        setReceipt,
-        persons,
-        setPersons,
-        personsList,
-        setPersonsList,
-        itemSplits,
-        setItemSplits,
+        // Multi-receipt state
+        files, setFiles,
+        imagePreviews, setImagePreviews,
+        receipts, setReceipts,
+        receiptData, setReceiptData,
+
+        // Shared state
+        persons, setPersons,
+        personsList, setPersonsList,
+        itemSplits, setItemSplits,
         results,
-        step,
-        setStep,
-        file,
-        setFile,
-        isLoading,
-        setIsLoading,
-        error,
-        setError,
-        imagePreview,
-        setImagePreview,
-        editingPrices,
-        setEditingPrices,
-        editedItems,
-        setEditedItems,
-        editedTaxes,
-        setEditedTaxes,
-        discountType,
-        setDiscountType,
-        discountValue,
-        setDiscountValue,
+        step, setStep,
+        isLoading, setIsLoading,
+        error, setError,
+        editingPrices, setEditingPrices,
+
+        // Calculations
+        calculateReceiptTotal,
         calculateCurrentTotal,
+        getAllItems,
+        getAllTaxes,
+
+        // Per-receipt actions
         handlePriceChange,
+        handleNameChange,
         handleTaxChange,
         handleTaxNameChange,
         addNewTax,
         removeTax,
+        setReceiptDiscount,
+        removeReceipt,
+
+        // Split actions
         toggleContributor,
         toggleCustomAmounts,
         handleCustomAmountChange,
         validateCustomAmounts,
         toggleAllContributors,
         calculateSplit,
+        initializeItemSplits,
+
+        // Navigation
         resetApp,
-        goToStep,
-        API_URL
+        goToStep
     };
 };
 

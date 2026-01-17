@@ -61,7 +61,7 @@ describe('AssignContributors', () => {
 
         render(<AssignContributors {...propsWithDiscount} />);
 
-        expect(screen.getByText('Discount')).toBeInTheDocument();
+        expect(screen.getByText('Discounts')).toBeInTheDocument();
         expect(screen.getByText('Discount (10%)')).toBeInTheDocument();
     });
 

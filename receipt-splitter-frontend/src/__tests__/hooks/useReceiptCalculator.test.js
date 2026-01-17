@@ -1,72 +1,172 @@
 import { renderHook } from '@testing-library/react';
-import {act} from 'react'
+import { act } from 'react';
 import useReceiptCalculator from 'src/components/hooks/useReceiptCalculator';
 
-describe('useReceiptCalculator', () => {
-    it('calculates total with items, taxes, and discount', () => {
+describe('useReceiptCalculator - Multi-Receipt Support', () => {
+    it('initializes with empty multi-receipt state', () => {
+        const { result } = renderHook(() => useReceiptCalculator());
+
+        expect(result.current.files).toEqual([]);
+        expect(result.current.imagePreviews).toEqual([]);
+        expect(result.current.receipts).toEqual([]);
+        expect(result.current.receiptData).toEqual([]);
+    });
+
+    it('calculates per-receipt total correctly', () => {
         const { result } = renderHook(() => useReceiptCalculator());
 
         act(() => {
-            // Set items
-            result.current.setEditedItems([
-                { price: 100 },
-                { price: 200 },
-                { price: 300 }
-            ]);
-            // Set taxes
-            result.current.setEditedTaxes([
-                { amount: 20 },
-                { amount: 30 }
-            ]);
-            // Set discount
-            result.current.setDiscountType('percentage');
-            result.current.setDiscountValue(10);
+            result.current.setReceiptData([{
+                items: [{ name: 'Pizza', price: 100 }, { name: 'Pasta', price: 50 }],
+                taxes: [{ name: 'GST', amount: 15 }],
+                discountType: 'none',
+                discountValue: 0
+            }]);
         });
 
-        // 650 total * 0.9 = 585
-        expect(result.current.calculateCurrentTotal()).toBeCloseTo(585);
+        expect(result.current.calculateReceiptTotal(0)).toBe(165);
     });
 
-    it('handles invalid custom amounts', () => {
+    it('calculates combined total across all receipts', () => {
+        const { result } = renderHook(() => useReceiptCalculator());
+
+        act(() => {
+            result.current.setReceiptData([
+                { items: [{ name: 'A', price: 100 }], taxes: [], discountType: 'none', discountValue: 0 },
+                { items: [{ name: 'B', price: 200 }], taxes: [], discountType: 'none', discountValue: 0 }
+            ]);
+        });
+
+        expect(result.current.calculateCurrentTotal()).toBe(300);
+    });
+
+    it('applies per-receipt discount correctly', () => {
+        const { result } = renderHook(() => useReceiptCalculator());
+
+        act(() => {
+            result.current.setReceiptData([{
+                items: [{ name: 'Item', price: 100 }],
+                taxes: [],
+                discountType: 'percentage',
+                discountValue: 10
+            }]);
+        });
+
+        expect(result.current.calculateReceiptTotal(0)).toBe(90);
+    });
+
+    it('updates item price for specific receipt', () => {
+        const { result } = renderHook(() => useReceiptCalculator());
+
+        act(() => {
+            result.current.setReceiptData([
+                { items: [{ name: 'A', price: 100 }], taxes: [], discountType: 'none', discountValue: 0 },
+                { items: [{ name: 'B', price: 200 }], taxes: [], discountType: 'none', discountValue: 0 }
+            ]);
+        });
+
+        act(() => {
+            result.current.handlePriceChange(1, 0, 300);
+        });
+
+        expect(result.current.receiptData[0].items[0].price).toBe(100); // Unchanged
+        expect(result.current.receiptData[1].items[0].price).toBe(300); // Changed
+    });
+
+    it('removes a receipt correctly', () => {
+        const { result } = renderHook(() => useReceiptCalculator());
+
+        act(() => {
+            result.current.setFiles([{ name: 'a.jpg' }, { name: 'b.jpg' }]);
+            result.current.setImagePreviews(['preview1', 'preview2']);
+            result.current.setReceipts([{ id: 1 }, { id: 2 }]);
+            result.current.setReceiptData([
+                { items: [{ name: 'A', price: 100 }], taxes: [], discountType: 'none', discountValue: 0 },
+                { items: [{ name: 'B', price: 200 }], taxes: [], discountType: 'none', discountValue: 0 }
+            ]);
+        });
+
+        act(() => {
+            result.current.removeReceipt(0);
+        });
+
+        expect(result.current.files.length).toBe(1);
+        expect(result.current.receiptData.length).toBe(1);
+        expect(result.current.receiptData[0].items[0].name).toBe('B');
+    });
+});
+
+describe('useReceiptCalculator - Split Calculation', () => {
+    it('toggles contributors and recalculates equal split', () => {
+        const { result } = renderHook(() => useReceiptCalculator());
+
+        act(() => {
+            result.current.setPersonsList(['Alice', 'Bob']);
+            result.current.setItemSplits([{
+                item_name: 'Item',
+                price: 100,
+                contributors: { 'Alice': 100 },
+                useCustomAmounts: false
+            }]);
+        });
+
+        act(() => {
+            result.current.toggleContributor(0, 'Bob');
+        });
+
+        expect(result.current.itemSplits[0].contributors).toEqual({
+            'Alice': 50,
+            'Bob': 50
+        });
+    });
+
+    it('validates custom amounts must sum to item price', () => {
         const { result } = renderHook(() => useReceiptCalculator());
 
         act(() => {
             result.current.setItemSplits([{
                 price: 100,
                 useCustomAmounts: true,
-                contributors: { 'Alice': 50, 'Bob': 60 } // Total 110 instead of 100
+                contributors: { 'Alice': 60, 'Bob': 50 }
             }]);
         });
 
         expect(result.current.validateCustomAmounts(0)).toBe(false);
+
+        act(() => {
+            result.current.setItemSplits([{
+                price: 100,
+                useCustomAmounts: true,
+                contributors: { 'Alice': 60, 'Bob': 40 }
+            }]);
+        });
+
+        expect(result.current.validateCustomAmounts(0)).toBe(true);
     });
 
-    it('handles split calculation with discount', () => {
+    it('calculates final split with discount applied', async () => {
         const { result } = renderHook(() => useReceiptCalculator());
 
         act(() => {
-            result.current.setEditedItems([{
+            result.current.setReceiptData([{
+                items: [{ name: 'Item', price: 100 }],
+                taxes: [],
+                discountType: 'absolute',
+                discountValue: 20
+            }]);
+            result.current.setPersonsList(['Alice', 'Bob']);
+            result.current.setItemSplits([{
+                item_name: 'Item',
                 price: 100,
                 contributors: { 'Alice': 50, 'Bob': 50 },
                 useCustomAmounts: false
             }]);
-            result.current.setPersonsList(['Alice', 'Bob']);
-            result.current.setDiscountType('absolute');
-            result.current.setDiscountValue(20);
-            result.current.setItemSplits([{
-                item_name: 'Test Item',
-                price: 80,
-                contributors: { 'Alice': 50, 'Bob': 50 },
-                useCustomAmounts: false
-            }]);
         });
 
-        act(() => {
-            result.current.calculateSplit();
+        await act(async () => {
+            await result.current.calculateSplit();
         });
-        // Verify the breakdown structure exists
-        expect(result.current.results).toHaveProperty('breakdown');
-        // Verify the actual amounts (80 split equally)
+
         expect(result.current.results.breakdown).toEqual([
             { person: 'Alice', amount: 40 },
             { person: 'Bob', amount: 40 }
@@ -74,624 +174,536 @@ describe('useReceiptCalculator', () => {
     });
 });
 
-describe('useReceiptCalculator - advanced calculations', () => {
-    it('toggles contributor correctly in equal split mode', () => {
+describe('useReceiptCalculator - Navigation', () => {
+    it('resets all state correctly', () => {
         const { result } = renderHook(() => useReceiptCalculator());
 
-        // Setup initial state
+        act(() => {
+            result.current.setFiles([{ name: 'test.jpg' }]);
+            result.current.setReceiptData([{ items: [], taxes: [], discountType: 'none', discountValue: 0 }]);
+            result.current.setStep(3);
+            result.current.setError('some error');
+        });
+
+        act(() => {
+            result.current.resetApp();
+        });
+
+        expect(result.current.files).toEqual([]);
+        expect(result.current.receiptData).toEqual([]);
+        expect(result.current.step).toBe(1);
+        expect(result.current.error).toBe('');
+    });
+
+    it('navigates to valid steps only', () => {
+        const { result } = renderHook(() => useReceiptCalculator());
+
+        act(() => result.current.goToStep(3));
+        expect(result.current.step).toBe(3);
+
+        act(() => result.current.goToStep(0));
+        expect(result.current.step).toBe(3); // Should not change
+
+        act(() => result.current.goToStep(5));
+        expect(result.current.step).toBe(3); // Should not change
+    });
+});
+
+describe('useReceiptCalculator - Item & Tax Editing', () => {
+    it('updates item name for specific receipt', () => {
+        const { result } = renderHook(() => useReceiptCalculator());
+
+        act(() => {
+            result.current.setReceiptData([
+                { items: [{ name: 'Old Name', price: 100 }], taxes: [], discountType: 'none', discountValue: 0 }
+            ]);
+        });
+
+        act(() => {
+            result.current.handleNameChange(0, 0, 'New Name');
+        });
+
+        expect(result.current.receiptData[0].items[0].name).toBe('New Name');
+    });
+
+    it('updates tax amount for specific receipt', () => {
+        const { result } = renderHook(() => useReceiptCalculator());
+
+        act(() => {
+            result.current.setReceiptData([
+                { items: [], taxes: [{ name: 'GST', amount: 10 }], discountType: 'none', discountValue: 0 }
+            ]);
+        });
+
+        act(() => {
+            result.current.handleTaxChange(0, 0, 25);
+        });
+
+        expect(result.current.receiptData[0].taxes[0].amount).toBe(25);
+    });
+
+    it('updates tax name for specific receipt', () => {
+        const { result } = renderHook(() => useReceiptCalculator());
+
+        act(() => {
+            result.current.setReceiptData([
+                { items: [], taxes: [{ name: 'Old Tax', amount: 10 }], discountType: 'none', discountValue: 0 }
+            ]);
+        });
+
+        act(() => {
+            result.current.handleTaxNameChange(0, 0, 'Service Charge');
+        });
+
+        expect(result.current.receiptData[0].taxes[0].name).toBe('Service Charge');
+    });
+
+    it('adds new tax to specific receipt', () => {
+        const { result } = renderHook(() => useReceiptCalculator());
+
+        act(() => {
+            result.current.setReceiptData([
+                { items: [], taxes: [], discountType: 'none', discountValue: 0 }
+            ]);
+        });
+
+        act(() => {
+            result.current.addNewTax(0);
+        });
+
+        expect(result.current.receiptData[0].taxes).toHaveLength(1);
+        expect(result.current.receiptData[0].taxes[0].name).toBe('New Tax/Fee');
+    });
+
+    it('removes tax from specific receipt', () => {
+        const { result } = renderHook(() => useReceiptCalculator());
+
+        act(() => {
+            result.current.setReceiptData([
+                { items: [], taxes: [{ name: 'GST', amount: 10 }, { name: 'VAT', amount: 5 }], discountType: 'none', discountValue: 0 }
+            ]);
+        });
+
+        act(() => {
+            result.current.removeTax(0, 0);
+        });
+
+        expect(result.current.receiptData[0].taxes).toHaveLength(1);
+        expect(result.current.receiptData[0].taxes[0].name).toBe('VAT');
+    });
+
+    it('sets receipt discount correctly', () => {
+        const { result } = renderHook(() => useReceiptCalculator());
+
+        act(() => {
+            result.current.setReceiptData([
+                { items: [{ name: 'Item', price: 100 }], taxes: [], discountType: 'none', discountValue: 0 }
+            ]);
+        });
+
+        act(() => {
+            result.current.setReceiptDiscount(0, 'percentage', 15);
+        });
+
+        expect(result.current.receiptData[0].discountType).toBe('percentage');
+        expect(result.current.receiptData[0].discountValue).toBe(15);
+        expect(result.current.calculateReceiptTotal(0)).toBe(85);
+    });
+
+    it('handles empty string values for price and tax', () => {
+        const { result } = renderHook(() => useReceiptCalculator());
+
+        act(() => {
+            result.current.setReceiptData([
+                { items: [{ name: 'Item', price: 100 }], taxes: [{ name: 'Tax', amount: 10 }], discountType: 'none', discountValue: 0 }
+            ]);
+        });
+
+        act(() => {
+            result.current.handlePriceChange(0, 0, '');
+            result.current.handleTaxChange(0, 0, '');
+        });
+
+        expect(result.current.receiptData[0].items[0].price).toBe('');
+        expect(result.current.receiptData[0].taxes[0].amount).toBe('');
+        expect(result.current.calculateReceiptTotal(0)).toBe(0);
+    });
+});
+
+describe('useReceiptCalculator - Contributor Management', () => {
+    it('toggles custom amounts mode on and off', () => {
+        const { result } = renderHook(() => useReceiptCalculator());
+
         act(() => {
             result.current.setItemSplits([{
-            item_name: 'Test Item',
-            price: 100,
-            contributors: { 'Alice': 50, 'Bob': 50 },
-            useCustomAmounts: false
+                item_name: 'Item',
+                price: 100,
+                contributors: { 'Alice': 50, 'Bob': 50 },
+                useCustomAmounts: false
             }]);
-            result.current.personsList = ['Alice', 'Bob', 'Charlie'];
         });
 
-        // Add a new contributor (Charlie)
         act(() => {
-            result.current.toggleContributor(0, 'Charlie');
+            result.current.toggleCustomAmounts(0);
         });
 
-        // Check if all three people now split the item equally
-        expect(result.current.itemSplits[0].contributors).toEqual({
-            'Alice': 33.333333333333336,
-            'Bob': 33.333333333333336,
-            'Charlie': 33.333333333333336
+        expect(result.current.itemSplits[0].useCustomAmounts).toBe(true);
+
+        // Toggle back - should recalculate equal split
+        act(() => {
+            result.current.toggleCustomAmounts(0);
         });
 
-        // Remove a contributor (Bob)
+        expect(result.current.itemSplits[0].useCustomAmounts).toBe(false);
+        expect(result.current.itemSplits[0].contributors).toEqual({ 'Alice': 50, 'Bob': 50 });
+    });
+
+    it('toggles all contributors on when not all selected', () => {
+        const { result } = renderHook(() => useReceiptCalculator());
+
+        act(() => {
+            result.current.setPersonsList(['Alice', 'Bob', 'Charlie']);
+            result.current.setItemSplits([{
+                item_name: 'Item',
+                price: 90,
+                contributors: { 'Alice': 90 },
+                useCustomAmounts: false
+            }]);
+        });
+
+        act(() => {
+            result.current.toggleAllContributors(0);
+        });
+
+        expect(Object.keys(result.current.itemSplits[0].contributors)).toEqual(['Alice', 'Bob', 'Charlie']);
+        expect(result.current.itemSplits[0].contributors['Alice']).toBe(30);
+    });
+
+    it('toggles all contributors off when all selected', () => {
+        const { result } = renderHook(() => useReceiptCalculator());
+
+        act(() => {
+            result.current.setPersonsList(['Alice', 'Bob']);
+            result.current.setItemSplits([{
+                item_name: 'Item',
+                price: 100,
+                contributors: { 'Alice': 50, 'Bob': 50 },
+                useCustomAmounts: false
+            }]);
+        });
+
+        act(() => {
+            result.current.toggleAllContributors(0);
+        });
+
+        expect(result.current.itemSplits[0].contributors).toEqual({});
+    });
+
+    it('toggles all contributors with custom amounts mode', () => {
+        const { result } = renderHook(() => useReceiptCalculator());
+
+        act(() => {
+            result.current.setPersonsList(['Alice', 'Bob']);
+            result.current.setItemSplits([{
+                item_name: 'Item',
+                price: 100,
+                contributors: {},
+                useCustomAmounts: true
+            }]);
+        });
+
+        act(() => {
+            result.current.toggleAllContributors(0);
+        });
+
+        expect(result.current.itemSplits[0].contributors).toEqual({ 'Alice': 0, 'Bob': 0 });
+    });
+
+    it('handles custom amount changes correctly', () => {
+        const { result } = renderHook(() => useReceiptCalculator());
+
+        act(() => {
+            result.current.setItemSplits([{
+                item_name: 'Item',
+                price: 100,
+                contributors: { 'Alice': 0, 'Bob': 0 },
+                useCustomAmounts: true
+            }]);
+        });
+
+        act(() => {
+            result.current.handleCustomAmountChange(0, 'Alice', 60);
+            result.current.handleCustomAmountChange(0, 'Bob', 40);
+        });
+
+        expect(result.current.itemSplits[0].contributors['Alice']).toBe(60);
+        expect(result.current.itemSplits[0].contributors['Bob']).toBe(40);
+    });
+
+    it('handles empty string in custom amount', () => {
+        const { result } = renderHook(() => useReceiptCalculator());
+
+        act(() => {
+            result.current.setItemSplits([{
+                item_name: 'Item',
+                price: 100,
+                contributors: { 'Alice': 50 },
+                useCustomAmounts: true
+            }]);
+        });
+
+        act(() => {
+            result.current.handleCustomAmountChange(0, 'Alice', '');
+        });
+
+        expect(result.current.itemSplits[0].contributors['Alice']).toBe('');
+    });
+
+    it('removes contributor in equal split mode', () => {
+        const { result } = renderHook(() => useReceiptCalculator());
+
+        act(() => {
+            result.current.setItemSplits([{
+                item_name: 'Item',
+                price: 100,
+                contributors: { 'Alice': 50, 'Bob': 50 },
+                useCustomAmounts: false
+            }]);
+        });
+
         act(() => {
             result.current.toggleContributor(0, 'Bob');
         });
 
-        // Check if the remaining two people now split the item equally
-        expect(result.current.itemSplits[0].contributors).toEqual({
-            'Alice': 50,
-            'Charlie': 50
-        });
+        expect(result.current.itemSplits[0].contributors).toEqual({ 'Alice': 100 });
     });
 
-    it('toggles custom amounts mode correctly', () => {
+    it('adds contributor in custom amounts mode with zero', () => {
         const { result } = renderHook(() => useReceiptCalculator());
 
-        // Setup initial state with equal splitting
         act(() => {
             result.current.setItemSplits([{
-            item_name: 'Test Item',
-            price: 100,
-            contributors: { 'Alice': 50, 'Bob': 50 },
-            useCustomAmounts: false
+                item_name: 'Item',
+                price: 100,
+                contributors: { 'Alice': 100 },
+                useCustomAmounts: true
             }]);
         });
 
-        // Switch to custom amounts mode
         act(() => {
-            result.current.toggleCustomAmounts(0);
+            result.current.toggleContributor(0, 'Bob');
         });
 
-        // Check if custom amounts mode is enabled but amounts are preserved
-        expect(result.current.itemSplits[0].useCustomAmounts).toBe(true);
-        expect(result.current.itemSplits[0].contributors).toEqual({
-            'Alice': 50,
-            'Bob': 50
-        });
-
-        // Switch back to equal splitting
-        act(() => {
-            result.current.toggleCustomAmounts(0);
-        });
-
-        // Check if equal splitting mode is restored
-        expect(result.current.itemSplits[0].useCustomAmounts).toBe(false);
-        expect(result.current.itemSplits[0].contributors).toEqual({
-            'Alice': 50,
-            'Bob': 50
-        });
+        expect(result.current.itemSplits[0].contributors['Bob']).toBe(0);
     });
 
-    it('validates custom amounts correctly', () => {
+    it('removes contributor in custom amounts mode', () => {
         const { result } = renderHook(() => useReceiptCalculator());
 
-        // Setup with valid custom amounts
         act(() => {
-            result.current.setItemSplits([{  // Call setItemSplits as a function
-                item_name: 'Test Item',
+            result.current.setItemSplits([{
+                item_name: 'Item',
                 price: 100,
                 contributors: { 'Alice': 60, 'Bob': 40 },
                 useCustomAmounts: true
             }]);
         });
 
-        
-        // Should be valid since amounts sum to price
-        expect(result.current.validateCustomAmounts(0)).toBe(true);
-
-        // Change to invalid amounts
         act(() => {
-            result.current.setItemSplits([{
-                ...result.current.itemSplits[0],
-                contributors: { 'Alice': 60, 'Bob': 30 }
-            }]);
+            result.current.toggleContributor(0, 'Bob');
         });
 
-        // Should be invalid since amounts don't sum to price
-        expect(result.current.validateCustomAmounts(0)).toBe(false);
-
-        // Test with small rounding difference (should be valid)
-        act(() => {
-            result.current.setItemSplits([{
-                ...result.current.itemSplits[0],
-                contributors: { 'Alice': 33.333, 'Bob': 33.333, 'Charlie': 33.333 }
-            }]);
-        });
-
-        // Small rounding differences should be allowed (99.99 vs 100)
-        expect(result.current.validateCustomAmounts(0)).toBe(true);
-    });
-
-    it('calculates correct splits with discounts', () => {
-        const { result } = renderHook(() => useReceiptCalculator());
-
-        // Setup state with items, taxes and a discount
-        act(() => {
-            result.current.setEditedItems([
-                { price: 100 },
-                { price: 200 }
-            ]);
-            result.current.setEditedTaxes([
-                { amount: 30 }
-            ]);
-            result.current.setDiscountType('percentage');
-            result.current.setDiscountValue(10);
-            result.current.setPersonsList(['Alice', 'Bob']);
-
-            result.current.setItemSplits([
-                {
-                    item_name: 'Item 1',
-                    price: 100,
-                    contributors: { 'Alice': 100 }, // Alice pays for item 1
-                    useCustomAmounts: false,
-                    isItem: true
-                },
-                {
-                    item_name: 'Item 2',
-                    price: 200,
-                    contributors: { 'Bob': 200 }, // Bob pays for item 2
-                    useCustomAmounts: false,
-                    isItem: true
-                },
-                {
-                    item_name: 'Tax',
-                    price: 30,
-                    contributors: { 'Alice': 15, 'Bob': 15 }, // Split tax equally
-                    useCustomAmounts: false,
-                    isTax: true
-                },
-                {
-                    item_name: 'Discount (10%)',
-                    price: -33, // 10% of 330
-                    contributors: { 'Alice': -16.5, 'Bob': -16.5 }, // Split discount equally
-                    useCustomAmounts: false,
-                    isDiscount: true
-                }
-            ]);
-        });
-
-        // Calculate the final split
-        act(() => {
-            result.current.calculateSplit();
-        });
-
-        // Check results - Alice: 100 (item) + 15 (tax) - 16.5 (discount) = 98.5
-        // Bob: 200 (item) + 15 (tax) - 16.5 (discount) = 198.5
-        expect(result.current.results.breakdown).toEqual([
-            { person: 'Alice', amount: 98.5 },
-            { person: 'Bob', amount: 198.5 }
-        ]);
+        expect(result.current.itemSplits[0].contributors).toEqual({ 'Alice': 60 });
     });
 });
 
-describe('useReceiptCalculator - additional functions', () => {
-    it('handles price and tax changes correctly', () => {
+describe('useReceiptCalculator - Initialization & Data Aggregation', () => {
+    it('initializes item splits from multi-receipt data', () => {
         const { result } = renderHook(() => useReceiptCalculator());
 
-        // First set initial items
         act(() => {
-            result.current.setEditedItems([
-                { name: 'Item 1', price: 100 },
-                { name: 'Item 2', price: 200 }
-            ]);
-        });
-
-        // Verify initial state
-        expect(result.current.editedItems).toEqual([
-            { name: 'Item 1', price: 100 },
-            { name: 'Item 2', price: 200 }
-        ]);
-
-        // Then handle price changes
-        act(() => {
-            result.current.handlePriceChange(0, '150');
-        });
-
-        // Verify price change
-        expect(result.current.editedItems[0].price).toBe(150);
-
-        // Test empty string
-        act(() => {
-            result.current.handlePriceChange(1, '');
-        });
-
-        // Verify empty string handling
-        expect(result.current.editedItems[1].price).toBe('');
-
-        // Test tax changes separately
-        act(() => {
-            result.current.setEditedTaxes([
-                { name: 'Tax 1', amount: 30 }
+            result.current.setReceiptData([
+                { items: [{ name: 'Pizza', price: 100 }], taxes: [{ name: 'GST', amount: 18 }], discountType: 'none', discountValue: 0 },
+                { items: [{ name: 'Burger', price: 50 }], taxes: [], discountType: 'none', discountValue: 0 }
             ]);
         });
 
         act(() => {
-            result.current.handleTaxChange(0, '40');
+            result.current.initializeItemSplits();
         });
 
-        expect(result.current.editedTaxes[0].amount).toBe(40);
+        expect(result.current.itemSplits).toHaveLength(3);
+        expect(result.current.itemSplits[0]).toMatchObject({ item_name: 'Pizza', price: 100, isItem: true, receiptIndex: 0 });
+        expect(result.current.itemSplits[1]).toMatchObject({ item_name: 'GST (Tax/Fee)', price: 18, isTax: true, receiptIndex: 0 });
+        expect(result.current.itemSplits[2]).toMatchObject({ item_name: 'Burger', price: 50, isItem: true, receiptIndex: 1 });
     });
 
-    it('handles app reset correctly', () => {
+    it('gets all items across receipts', () => {
         const { result } = renderHook(() => useReceiptCalculator());
-        const mockRevokeObjectURL = jest.fn();
-        global.URL.revokeObjectURL = mockRevokeObjectURL;
 
         act(() => {
-            // Set various states
-            result.current.setImagePreview('blob:test');
-            result.current.setReceipt({ data: 'test' });
-            result.current.setPersons('Alice, Bob');
-            result.current.setPersonsList(['Alice', 'Bob']);
-            result.current.setStep(3);
-            result.current.setError('test error');
-
-            // Reset the app
-            result.current.resetApp();
+            result.current.setReceiptData([
+                { items: [{ name: 'A', price: 10 }], taxes: [], discountType: 'none', discountValue: 0 },
+                { items: [{ name: 'B', price: 20 }], taxes: [], discountType: 'none', discountValue: 0 }
+            ]);
         });
 
-        // Verify all states are reset
-        expect(result.current.receipt).toBeNull();
-        expect(result.current.persons).toBe('');
-        expect(result.current.personsList).toEqual([]);
-        expect(result.current.step).toBe(1);
-        expect(result.current.error).toBe('');
+        const allItems = result.current.getAllItems();
+        expect(allItems).toHaveLength(2);
+        expect(allItems[0]).toMatchObject({ name: 'A', receiptIndex: 0 });
+        expect(allItems[1]).toMatchObject({ name: 'B', receiptIndex: 1 });
+    });
+
+    it('gets all taxes across receipts', () => {
+        const { result } = renderHook(() => useReceiptCalculator());
+
+        act(() => {
+            result.current.setReceiptData([
+                { items: [], taxes: [{ name: 'GST', amount: 10 }], discountType: 'none', discountValue: 0 },
+                { items: [], taxes: [{ name: 'VAT', amount: 5 }], discountType: 'none', discountValue: 0 }
+            ]);
+        });
+
+        const allTaxes = result.current.getAllTaxes();
+        expect(allTaxes).toHaveLength(2);
+        expect(allTaxes[0]).toMatchObject({ name: 'GST', receiptIndex: 0 });
+        expect(allTaxes[1]).toMatchObject({ name: 'VAT', receiptIndex: 1 });
+    });
+
+    it('returns 0 for non-existent receipt index', () => {
+        const { result } = renderHook(() => useReceiptCalculator());
+
+        expect(result.current.calculateReceiptTotal(99)).toBe(0);
     });
 });
 
-describe('useReceiptCalculator - integration test', () => {
-    it('handles complete receipt splitting flow', async () => {
+describe('useReceiptCalculator - Calculate Split Errors', () => {
+    it('shows error when item has no contributors', async () => {
         const { result } = renderHook(() => useReceiptCalculator());
 
-        // Step 1: Set up receipt data
         act(() => {
-            result.current.setReceipt({
-                ocr_contents: {
-                    items: [
-                        { name: 'Pizza', price: 200 },
-                        { name: 'Pasta', price: 150 }
-                    ],
-                    total_order_bill_details: {
-                        taxes: [{ name: 'Service Tax', amount: 35 }]
-                    }
-                }
-            });
-            result.current.setEditedItems([
-                { name: 'Pizza', price: 200 },
-                { name: 'Pasta', price: 150 }
-            ]);
-            result.current.setEditedTaxes([
-                { name: 'Service Tax', amount: 35 }
-            ]);
+            result.current.setPersonsList(['Alice']);
+            result.current.setItemSplits([{
+                item_name: 'Orphan Item',
+                price: 100,
+                contributors: {},
+                useCustomAmounts: false
+            }]);
         });
 
-        // Step 2: Add persons and set up splits
-        act(() => {
-            result.current.setPersonsList(['Alice', 'Bob']);
-            result.current.setItemSplits([
-                {
-                    item_name: 'Pizza',
-                    price: 200,
-                    contributors: {},
-                    useCustomAmounts: false,
-                    isItem: true
-                },
-                {
-                    item_name: 'Pasta',
-                    price: 150,
-                    contributors: {},
-                    useCustomAmounts: false,
-                    isItem: true
-                },
-                {
-                    item_name: 'Service Tax',
-                    price: 35,
-                    contributors: {},
-                    useCustomAmounts: false,
-                    isTax: true
-                }
-            ]);
-        });
-
-        // Step 3: Assign contributors
-        act(() => {
-            result.current.toggleContributor(0, 'Alice'); // Pizza - Alice
-            result.current.toggleContributor(1, 'Bob');   // Pasta - Bob
-            result.current.toggleContributor(2, 'Alice'); // Tax - Split
-            result.current.toggleContributor(2, 'Bob');   // Tax - Split
-        });
-
-        // Add a discount
-        act(() => {
-            result.current.setDiscountType('percentage');
-            result.current.setDiscountValue(10);
-        });
-
-        // Calculate final split
         await act(async () => {
             await result.current.calculateSplit();
         });
 
-        // Verify results
-        expect(result.current.results).toBeTruthy();
-        expect(result.current.step).toBe(4);
-
-        // Verify split amounts (with 10% discount)
-        const aliceAmount = result.current.results.breakdown
-            .find(x => x.person === 'Alice').amount;
-        const bobAmount = result.current.results.breakdown
-            .find(x => x.person === 'Bob').amount;
-
-        // Pizza (200) + Half Tax (17.5) - 10% discount
-        expect(aliceAmount).toBeCloseTo(195.75, 2);
-        // Pasta (150) + Half Tax (17.5) - 10% discount
-        expect(bobAmount).toBeCloseTo(150.75, 2);
+        expect(result.current.error).toContain('Orphan Item');
+        expect(result.current.error).toContain('no contributors');
+        expect(result.current.results).toBeNull();
     });
 
-});
-describe('useReceiptCalculator - custom amounts handling', () => {
-    it('handles custom amount toggling correctly', () => {
+    it('shows error when custom amounts do not sum correctly', async () => {
         const { result } = renderHook(() => useReceiptCalculator());
 
-        // Setup initial state
-        act(() => {
-            result.current.setPersonsList(['Alice', 'Bob', 'Charlie']);
-            result.current.setItemSplits([{
-                item_name: 'Pizza',
-                price: 100,
-                contributors: {},
-                useCustomAmounts: true,
-                isItem: true
-            }]);
-        });
-
-        // Add first contributor with custom amount
-        act(() => {
-            result.current.toggleContributor(0, 'Alice');
-        });
-
-        // Check initial custom amount is 0
-        expect(result.current.itemSplits[0].contributors['Alice']).toBe(0);
-
-        // Add second contributor
-        act(() => {
-            result.current.toggleContributor(0, 'Bob');
-        });
-
-        expect(result.current.itemSplits[0].contributors['Bob']).toBe(0);
-
-        // Remove a contributor
-        act(() => {
-            result.current.toggleContributor(0, 'Alice');
-        });
-
-        // Check Alice was removed
-        expect(result.current.itemSplits[0].contributors['Alice']).toBeUndefined();
-        // Check Bob still exists with original amount
-        expect(result.current.itemSplits[0].contributors['Bob']).toBe(0);
-    });
-
-    it('switches between custom and equal splitting modes', () => {
-        const { result } = renderHook(() => useReceiptCalculator());
-
-        // Setup initial state with equal splitting
         act(() => {
             result.current.setPersonsList(['Alice', 'Bob']);
             result.current.setItemSplits([{
-                item_name: 'Pizza',
+                item_name: 'Mismatched Item',
+                price: 100,
+                contributors: { 'Alice': 30, 'Bob': 30 },
+                useCustomAmounts: true
+            }]);
+        });
+
+        await act(async () => {
+            await result.current.calculateSplit();
+        });
+
+        expect(result.current.error).toContain('Mismatched Item');
+        expect(result.current.error).toContain('invalid split amounts');
+        expect(result.current.results).toBeNull();
+    });
+
+    it('completes calculation and navigates to step 4', async () => {
+        const { result } = renderHook(() => useReceiptCalculator());
+
+        act(() => {
+            result.current.setReceiptData([{
+                items: [{ name: 'Item', price: 100 }],
+                taxes: [],
+                discountType: 'none',
+                discountValue: 0
+            }]);
+            result.current.setPersonsList(['Alice', 'Bob']);
+            result.current.setItemSplits([{
+                item_name: 'Item',
                 price: 100,
                 contributors: { 'Alice': 50, 'Bob': 50 },
-                useCustomAmounts: false,
-                isItem: true
-            }]);
-        });
-
-        // Switch to custom amounts
-        act(() => {
-            result.current.toggleCustomAmounts(0);
-        });
-
-        expect(result.current.itemSplits[0].useCustomAmounts).toBe(true);
-        expect(result.current.itemSplits[0].contributors['Alice']).toBe(50);
-        expect(result.current.itemSplits[0].contributors['Bob']).toBe(50);
-
-        // Switch back to equal splitting
-        act(() => {
-            result.current.toggleCustomAmounts(0);
-        });
-
-        expect(result.current.itemSplits[0].useCustomAmounts).toBe(false);
-        expect(result.current.itemSplits[0].contributors['Alice']).toBe(50);
-        expect(result.current.itemSplits[0].contributors['Bob']).toBe(50);
-    });
-
-    it('validates custom amounts correctly', () => {
-        const { result } = renderHook(() => useReceiptCalculator());
-
-        // Setup state with custom amounts
-        act(() => {
-            result.current.setItemSplits([{
-                item_name: 'Pizza',
-                price: 100,
-                contributors: { 'Alice': 60, 'Bob': 40 },
-                useCustomAmounts: true,
-                isItem: true
-            }]);
-        });
-
-        // Test valid amounts (sum equals price)
-        expect(result.current.validateCustomAmounts(0)).toBe(true);
-
-        // Update to invalid amounts
-        act(() => {
-            result.current.handleCustomAmountChange(0, 'Alice', 70);
-            result.current.handleCustomAmountChange(0, 'Bob', 40);
-        });
-
-        // Test invalid amounts (sum exceeds price)
-        expect(result.current.validateCustomAmounts(0)).toBe(false);
-
-        // Test with empty string input
-        act(() => {
-            result.current.handleCustomAmountChange(0, 'Alice', '');
-            result.current.handleCustomAmountChange(0, 'Bob', 100);
-        });
-
-        // Should treat empty string as 0
-        expect(result.current.validateCustomAmounts(0)).toBe(true);
-    });
-
-    it('handles rounding differences in custom amounts', () => {
-        const { result } = renderHook(() => useReceiptCalculator());
-
-        // Setup state with amounts that have rounding issues
-        act(() => {
-            result.current.setItemSplits([{
-                item_name: 'Pizza',
-                price: 100,
-                contributors: {
-                    'Alice': 33.33,
-                    'Bob': 33.33,
-                    'Charlie': 33.33
-                },
-                useCustomAmounts: true,
-                isItem: true
-            }]);
-        });
-    });
-});
-
-describe('useReceiptCalculator - toggleAllContributors', () => {
-    it('selects all contributors when none are selected', () => {
-        const { result } = renderHook(() => useReceiptCalculator());
-
-        // Setup initial state with no contributors
-        act(() => {
-            result.current.setPersonsList(['Alice', 'Bob', 'Charlie']);
-            result.current.setItemSplits([{
-                item_name: 'Test Item',
-                price: 90,
-                contributors: {},
                 useCustomAmounts: false
             }]);
         });
 
-        // Toggle all contributors
-        act(() => {
-            result.current.toggleAllContributors(0);
-        });
-
-        // Check if all persons are now contributors with equal split
-        expect(result.current.itemSplits[0].contributors).toEqual({
-            'Alice': 30,
-            'Bob': 30,
-            'Charlie': 30
-        });
-    });
-
-    it('deselects all contributors when all are selected', () => {
-        const { result } = renderHook(() => useReceiptCalculator());
-
-        // Setup initial state with all contributors selected
-        act(() => {
-            result.current.setPersonsList(['Alice', 'Bob', 'Charlie']);
-            result.current.setItemSplits([{
-                item_name: 'Test Item',
-                price: 90,
-                contributors: {
-                    'Alice': 30,
-                    'Bob': 30,
-                    'Charlie': 30
-                },
-                useCustomAmounts: false
-            }]);
-        });
-
-        // Toggle all contributors
-        act(() => {
-            result.current.toggleAllContributors(0);
-        });
-
-        // Check if all contributors are now deselected
-        expect(result.current.itemSplits[0].contributors).toEqual({});
-    });
-
-    it('selects all contributors with custom amounts set to 0', () => {
-        const { result } = renderHook(() => useReceiptCalculator());
-
-        // Setup initial state with no contributors and custom amounts enabled
-        act(() => {
-            result.current.setPersonsList(['Alice', 'Bob', 'Charlie']);
-            result.current.setItemSplits([{
-                item_name: 'Test Item',
-                price: 90,
-                contributors: {},
-                useCustomAmounts: true
-            }]);
-        });
-
-        // Toggle all contributors
-        act(() => {
-            result.current.toggleAllContributors(0);
-        });
-
-        // Check if all persons are now contributors with custom amounts set to 0
-        expect(result.current.itemSplits[0].contributors).toEqual({
-            'Alice': 0,
-            'Bob': 0,
-            'Charlie': 0
-        });
-    });
-
-    it('deselects all contributors when all are selected with custom amounts', () => {
-        const { result } = renderHook(() => useReceiptCalculator());
-
-        // Setup initial state with all contributors selected and custom amounts enabled
-        act(() => {
-            result.current.setPersonsList(['Alice', 'Bob', 'Charlie']);
-            result.current.setItemSplits([{
-                item_name: 'Test Item',
-                price: 90,
-                contributors: {
-                    'Alice': 30,
-                    'Bob': 30,
-                    'Charlie': 30
-                },
-                useCustomAmounts: true
-            }]);
-        });
-
-        // Toggle all contributors
-        act(() => {
-            result.current.toggleAllContributors(0);
-        });
-
-        // Check if all contributors are now deselected
-        expect(result.current.itemSplits[0].contributors).toEqual({});
-    });
-});
-
-describe('useReceiptCalculator - goToStep', () => {
-    it('sets the step correctly within valid range', () => {
-        const { result } = renderHook(() => useReceiptCalculator());
-
-        act(() => {
-            result.current.goToStep(2);
-        });
-
-        expect(result.current.step).toBe(2);
-        expect(result.current.error).toBe('');
-
-        act(() => {
-            result.current.goToStep(4);
+        await act(async () => {
+            await result.current.calculateSplit();
         });
 
         expect(result.current.step).toBe(4);
         expect(result.current.error).toBe('');
+        expect(result.current.results).not.toBeNull();
     });
+});
 
-    it('does not set the step outside valid range', () => {
+describe('useReceiptCalculator - Edge Cases', () => {
+    it('handles discount that exceeds total (returns 0)', () => {
         const { result } = renderHook(() => useReceiptCalculator());
 
         act(() => {
-            result.current.goToStep(0);
+            result.current.setReceiptData([{
+                items: [{ name: 'Item', price: 50 }],
+                taxes: [],
+                discountType: 'absolute',
+                discountValue: 100
+            }]);
         });
 
-        expect(result.current.step).toBe(1); // Initial step should remain unchanged
+        expect(result.current.calculateReceiptTotal(0)).toBe(0);
+    });
+
+    it('validates custom amounts with empty string contributors', () => {
+        const { result } = renderHook(() => useReceiptCalculator());
 
         act(() => {
-            result.current.goToStep(5);
+            result.current.setItemSplits([{
+                price: 100,
+                useCustomAmounts: true,
+                contributors: { 'Alice': '', 'Bob': 100 }
+            }]);
         });
 
-        expect(result.current.step).toBe(1); // Initial step should remain unchanged
+        expect(result.current.validateCustomAmounts(0)).toBe(true);
+    });
+
+    it('returns true for non-custom amounts validation', () => {
+        const { result } = renderHook(() => useReceiptCalculator());
+
+        act(() => {
+            result.current.setItemSplits([{
+                price: 100,
+                useCustomAmounts: false,
+                contributors: { 'Alice': 100 }
+            }]);
+        });
+
+        expect(result.current.validateCustomAmounts(0)).toBe(true);
+    });
+
+    it('clears error when navigating to valid step', () => {
+        const { result } = renderHook(() => useReceiptCalculator());
+
+        act(() => {
+            result.current.setError('Some error');
+            result.current.goToStep(2);
+        });
+
+        expect(result.current.error).toBe('');
+        expect(result.current.step).toBe(2);
     });
 });

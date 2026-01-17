@@ -1,5 +1,6 @@
 import React from 'react';
 import ContributorItem from './ContributorItem';
+
 const AssignContributors = ({
     itemSplits,
     personsList,
@@ -12,6 +13,69 @@ const AssignContributors = ({
     calculateSplit,
     setError
 }) => {
+    // Group items by receipt
+    const receiptIndices = [...new Set(itemSplits.map(item => item.receiptIndex))].filter(i => i !== undefined);
+    const hasMultipleReceipts = receiptIndices.length > 1;
+
+    // Helper to render items for a specific receipt or all if single receipt
+    const renderItemsSection = (items, label, colorScheme) => {
+        if (items.length === 0) return null;
+
+        if (hasMultipleReceipts) {
+            // Group by receipt
+            return receiptIndices.map(receiptIdx => {
+                const receiptItems = items.filter(item => item.receiptIndex === receiptIdx);
+                if (receiptItems.length === 0) return null;
+
+                return (
+                    <div key={`${label}-receipt-${receiptIdx}`} className="mb-4">
+                        <div className="inline-flex items-center gap-2 bg-indigo-100 text-indigo-800 font-semibold text-base px-3 py-1.5 rounded-full mb-3">
+                            📄 Receipt {receiptIdx + 1}
+                        </div>
+                        {receiptItems.map((item) => {
+                            const itemIndex = itemSplits.findIndex(i => i === item);
+                            return (
+                                <ContributorItem
+                                    key={itemIndex}
+                                    item={item}
+                                    itemIndex={itemIndex}
+                                    personsList={personsList}
+                                    toggleContributor={toggleContributor}
+                                    toggleCustomAmounts={toggleCustomAmounts}
+                                    handleCustomAmountChange={handleCustomAmountChange}
+                                    validateCustomAmounts={validateCustomAmounts}
+                                    toggleAllContributors={toggleAllContributors}
+                                    colorScheme={colorScheme}
+                                    itemType={label}
+                                />
+                            );
+                        })}
+                    </div>
+                );
+            });
+        } else {
+            // Single receipt - no grouping needed
+            return items.map((item) => {
+                const itemIndex = itemSplits.findIndex(i => i === item);
+                return (
+                    <ContributorItem
+                        key={itemIndex}
+                        item={item}
+                        itemIndex={itemIndex}
+                        personsList={personsList}
+                        toggleContributor={toggleContributor}
+                        toggleCustomAmounts={toggleCustomAmounts}
+                        handleCustomAmountChange={handleCustomAmountChange}
+                        validateCustomAmounts={validateCustomAmounts}
+                        toggleAllContributors={toggleAllContributors}
+                        colorScheme={colorScheme}
+                        itemType={label}
+                    />
+                );
+            });
+        }
+    };
+
     const itemsWithItems = itemSplits.filter(item => item.isItem);
     const itemsWithTaxes = itemSplits.filter(item => item.isTax);
     const itemsWithDiscount = itemSplits.filter(item => item.isDiscount);
@@ -26,25 +90,7 @@ const AssignContributors = ({
                 {itemsWithItems.length > 0 && (
                     <div>
                         <h3 className="text-lg font-semibold mb-2 text-indigo-700">Items</h3>
-                        {itemsWithItems.map((item) => {
-                            const itemIndex = itemSplits.findIndex(i => i === item);
-                            return (
-                                <ContributorItem
-                                    key={itemIndex}
-                                    item={item}
-                                    itemIndex={itemIndex}
-                                    personsList={personsList}
-                                    toggleContributor={toggleContributor}
-                                    toggleCustomAmounts={toggleCustomAmounts}
-                                    handleCustomAmountChange={handleCustomAmountChange}
-                                    validateCustomAmounts={validateCustomAmounts}
-                                    toggleAllContributors={toggleAllContributors}
-                                    colorScheme="indigo"
-                                    itemType="Item"
-                                />
-
-                            );
-                        })}
+                        {renderItemsSection(itemsWithItems, "Item", "indigo")}
                     </div>
                 )}
 
@@ -52,50 +98,15 @@ const AssignContributors = ({
                 {itemsWithTaxes.length > 0 && (
                     <div>
                         <h3 className="text-lg font-semibold mb-2 text-amber-700">Taxes & Fees</h3>
-                        {itemsWithTaxes.map((item) => {
-                            const itemIndex = itemSplits.findIndex(i => i === item);
-                            return (
-                                <ContributorItem
-                                    key={itemIndex}
-                                    item={item}
-                                    itemIndex={itemIndex}
-                                    personsList={personsList}
-                                    toggleContributor={toggleContributor}
-                                    toggleCustomAmounts={toggleCustomAmounts}
-                                    handleCustomAmountChange={handleCustomAmountChange}
-                                    validateCustomAmounts={validateCustomAmounts}
-                                    toggleAllContributors={toggleAllContributors}
-                                    colorScheme="amber"
-                                    itemType="Tax"
-                                />
-
-                            );
-                        })}
+                        {renderItemsSection(itemsWithTaxes, "Tax", "amber")}
                     </div>
                 )}
 
-                {/* Discount section (if a discount was applied) */}
+                {/* Discount section */}
                 {itemsWithDiscount.length > 0 && (
                     <div>
-                        <h3 className="text-lg font-semibold mb-2 text-green-700">Discount</h3>
-                        {itemsWithDiscount.map((item) => {
-                            const itemIndex = itemSplits.findIndex(i => i === item);
-                            return (
-                                <ContributorItem
-                                    key={itemIndex}
-                                    item={item}
-                                    itemIndex={itemIndex}
-                                    personsList={personsList}
-                                    toggleContributor={toggleContributor}
-                                    toggleCustomAmounts={toggleCustomAmounts}
-                                    handleCustomAmountChange={handleCustomAmountChange}
-                                    validateCustomAmounts={validateCustomAmounts}
-                                    toggleAllContributors={toggleAllContributors}
-                                    colorScheme="green"
-                                    itemType="Discount"
-                                />
-                            );
-                        })}
+                        <h3 className="text-lg font-semibold mb-2 text-green-700">Discounts</h3>
+                        {renderItemsSection(itemsWithDiscount, "Discount", "green")}
                     </div>
                 )}
             </div>

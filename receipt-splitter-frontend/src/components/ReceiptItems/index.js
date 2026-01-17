@@ -1,111 +1,82 @@
 import React from 'react';
-import ItemsEditor from './ItemsEditor';
-import TaxesEditor from './TaxesEditor';
-import DiscountEditor from './DiscountEditor';
+import ReceiptCard from './ReceiptCard';
 
 const ReceiptItems = ({
-    imagePreview,
+    imagePreviews,
+    receiptData,
     editingPrices,
     setEditingPrices,
-    editedItems,
-    setEditedItems,
-    editedTaxes,
-    setEditedTaxes,
-    discountType,
-    setDiscountType,
-    discountValue,
-    setDiscountValue,
+    calculateReceiptTotal,
     calculateCurrentTotal,
     handlePriceChange,
+    handleNameChange,
     handleTaxChange,
     handleTaxNameChange,
     addNewTax,
-    removeTax
+    removeTax,
+    setReceiptDiscount,
+    removeReceipt
 }) => {
     return (
         <div className="space-y-6">
-            <h2 className="text-xl font-bold text-indigo-800">Receipt Items</h2>
+            <div className="flex justify-between items-center">
+                <h2 className="text-xl font-bold text-indigo-800">
+                    Review Receipts ({receiptData.length})
+                </h2>
+                <button
+                    onClick={() => setEditingPrices(!editingPrices)}
+                    className={`text-sm px-3 py-1 rounded font-medium ${editingPrices
+                            ? 'bg-amber-100 text-amber-800 hover:bg-amber-200'
+                            : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'
+                        }`}
+                >
+                    {editingPrices ? 'Done Editing' : 'Edit Prices/Names'}
+                </button>
+            </div>
 
-            {/* Two column layout with image and items */}
-            <div className="flex flex-col md:flex-row gap-6">
-                {/* Receipt image column */}
-                <div className="w-full md:w-1/2">
-                    <h3 className="text-lg font-semibold mb-2 text-indigo-700">Original Receipt</h3>
-                    {imagePreview && (
-                        <img
-                            src={imagePreview}
-                            alt="Receipt"
-                            className="max-w-full border rounded-lg shadow-sm"
-                            style={{ maxHeight: '500px', objectFit: 'contain' }}
-                        />
-                    )}
+            {editingPrices && (
+                <div className="p-2 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+                    ✏️ Edit prices and names to correct any OCR errors before proceeding.
                 </div>
+            )}
 
-                {/* Extracted items and taxes column */}
-                <div className="w-full md:w-1/2">
-                    <div className="flex justify-between items-center mb-2">
-                        <h3 className="text-lg font-semibold text-indigo-700">Extracted Items</h3>
-                        <button
-                            onClick={() => setEditingPrices(!editingPrices)}
-                            className={`text-sm px-3 py-1 rounded font-medium ${editingPrices
-                                ? 'bg-amber-100 text-amber-800 hover:bg-amber-200'
-                                : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'
-                                }`}
-                        >
-                            {editingPrices ? 'Reset to Original' : 'Edit Prices/Names'}
-                        </button>
-                    </div>
+            {/* Horizontal scrollable receipt cards */}
+            <div className="flex overflow-x-auto gap-4 pb-4 -mx-2 px-2">
+                {receiptData.map((data, index) => (
+                    <ReceiptCard
+                        key={index}
+                        receiptIndex={index}
+                        imagePreview={imagePreviews[index]}
+                        items={data.items}
+                        taxes={data.taxes}
+                        discountType={data.discountType}
+                        discountValue={data.discountValue}
+                        editingPrices={editingPrices}
+                        calculateReceiptTotal={calculateReceiptTotal}
+                        handlePriceChange={handlePriceChange}
+                        handleNameChange={handleNameChange}
+                        handleTaxChange={handleTaxChange}
+                        handleTaxNameChange={handleTaxNameChange}
+                        addNewTax={addNewTax}
+                        removeTax={removeTax}
+                        setReceiptDiscount={setReceiptDiscount}
+                        removeReceipt={removeReceipt}
+                        totalReceipts={receiptData.length}
+                    />
+                ))}
+            </div>
 
-                    <div className="space-y-2">
-                        <ItemsEditor
-                            editedItems={editedItems}
-                            editingPrices={editingPrices}
-                            handlePriceChange={handlePriceChange}
-                            handleNameChange={(index, newName) => {
-                                const updatedItems = [...editedItems];
-                                updatedItems[index].name = newName;
-                                setEditedItems(updatedItems);
-                            }}
-                        />
-
-                        <TaxesEditor
-                            editedTaxes={editedTaxes}
-                            editingPrices={editingPrices}
-                            handleTaxChange={handleTaxChange}
-                            handleTaxNameChange={handleTaxNameChange}
-                            addNewTax={addNewTax}
-                            removeTax={removeTax}
-                        />
-
-                        <DiscountEditor
-                            discountType={discountType}
-                            setDiscountType={setDiscountType}
-                            discountValue={discountValue}
-                            setDiscountValue={setDiscountValue}
-                        />
-
-                        <div className="p-3 bg-indigo-200 rounded-lg">
-                            <p className="font-bold text-indigo-900">Total</p>
-                            <p className="text-right font-bold text-indigo-900">
-                                ₹{calculateCurrentTotal().toFixed(2)}
-                            </p>
-
-                            {discountType !== 'none' && parseFloat(discountValue) > 0 && (
-                                <div className="mt-1 text-xs text-right text-green-700">
-                                    <p>Original: ₹{(editedItems.reduce((sum, item) => sum + (parseFloat(item.price) || 0), 0) +
-                                        editedTaxes.reduce((sum, tax) => sum + (parseFloat(tax.amount) || 0), 0)).toFixed(2)}</p>
-                                    <p>Discount: {discountType === 'percentage' ? `${discountValue}%` : `₹${discountValue}`}</p>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    {editingPrices && (
-                        <div className="mt-3 p-2 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
-                            <p>✏️ Edit the prices above to correct any OCR errors before proceeding.</p>
-                        </div>
-                    )}
+            {/* Combined Total */}
+            <div className="p-4 bg-indigo-200 rounded-lg">
+                <div className="flex justify-between items-center">
+                    <span className="font-bold text-indigo-900 text-lg">Combined Total</span>
+                    <span className="font-bold text-indigo-900 text-xl">₹{calculateCurrentTotal().toFixed(2)}</span>
                 </div>
+                {receiptData.length > 1 && (
+                    <p className="text-sm text-indigo-700 mt-1">
+                        Total from {receiptData.length} receipts
+                    </p>
+                )}
             </div>
         </div>
     );
