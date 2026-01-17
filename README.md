@@ -14,7 +14,7 @@ Split bills with friends without the awkward math. Snap a receipt, assign items,
 4. **Assign** items to people
 5. **Get** a clear breakdown of who owes what
 
-Handles taxes, tips, and discounts automatically.
+Handles taxes, tips, and discounts automatically based on inputs.
 
 ## Architecture
 
