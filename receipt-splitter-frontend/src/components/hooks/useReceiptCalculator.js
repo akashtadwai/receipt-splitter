@@ -398,6 +398,17 @@ const useReceiptCalculator = () => {
         setItemSplits(allItems);
     };
 
+    // State for tracking who paid for each receipt
+    const [receiptPayers, setReceiptPayers] = useState({});
+
+    // Update payer for a specific receipt
+    const setReceiptPayer = (receiptIndex, payer) => {
+        setReceiptPayers(prev => ({
+            ...prev,
+            [receiptIndex]: payer
+        }));
+    };
+
     return {
         // Multi-receipt state
         files, setFiles,
@@ -414,6 +425,7 @@ const useReceiptCalculator = () => {
         isLoading, setIsLoading,
         error, setError,
         editingPrices, setEditingPrices,
+        receiptPayers, setReceiptPayers,
 
         // Calculations
         calculateReceiptTotal,
@@ -430,6 +442,7 @@ const useReceiptCalculator = () => {
         removeTax,
         setReceiptDiscount,
         removeReceipt,
+        setReceiptPayer,
 
         // Split actions
         toggleContributor,

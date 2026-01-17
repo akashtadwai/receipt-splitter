@@ -50,6 +50,10 @@ function App() {
     toggleAllContributors,
     calculateSplit,
 
+    // Payer & Settlement
+    receiptPayers, setReceiptPayer,
+    // calculateNetSettlements, // Removed as per user request (Splitwise does it)
+
     // Navigation
     resetApp,
     goToStep
@@ -132,6 +136,11 @@ function App() {
             resetApp={resetApp}
             itemSplits={itemSplits}
             calculateCurrentTotal={calculateCurrentTotal}
+            receiptData={receiptData}
+            receiptPayers={receiptPayers}
+            setReceiptPayer={setReceiptPayer}
+            personsList={personsList}
+            calculateReceiptTotal={calculateReceiptTotal}
           />
         )}
 

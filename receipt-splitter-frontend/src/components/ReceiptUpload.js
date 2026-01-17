@@ -123,14 +123,23 @@ const ReceiptUpload = ({
 
             // Set receipt data for successful results only
             setReceipts(successfulResults.map(r => r.data));
-            setReceiptData(successfulResults.map(r => ({
-                items: r.data.ocr_contents.items.map(item => ({ ...item })),
-                taxes: r.data.ocr_contents.total_order_bill_details.taxes
-                    ? r.data.ocr_contents.total_order_bill_details.taxes.map(tax => ({ ...tax }))
-                    : [],
-                discountType: 'none',
-                discountValue: 0
-            })));
+            setReceiptData(successfulResults.map(r => {
+                // Defensive: ensure we have clean, simple objects (no circular refs)
+                const items = (r.data.ocr_contents?.items || []).map(item => ({
+                    name: String(item.name || ''),
+                    price: Number(item.price) || 0
+                }));
+                const taxes = (r.data.ocr_contents?.total_order_bill_details?.taxes || []).map(tax => ({
+                    name: String(tax.name || ''),
+                    amount: Number(tax.amount) || 0
+                }));
+                return {
+                    items,
+                    taxes,
+                    discountType: 'none',
+                    discountValue: 0
+                };
+            }));
 
             // Show warning about skipped files, but continue
             if (failedResults.length > 0) {
@@ -203,8 +212,8 @@ const ReceiptUpload = ({
                     onClick={processReceipts}
                     disabled={files.length === 0 || isLoading}
                     className={`flex-1 py-3 rounded-lg font-medium ${files.length === 0 || isLoading
-                            ? 'bg-gray-300 text-gray-500'
-                            : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                        ? 'bg-gray-300 text-gray-500'
+                        : 'bg-indigo-600 text-white hover:bg-indigo-700'
                         } transition-colors`}
                 >
                     {isLoading ? 'Processing...' : `Process ${files.length || ''} Receipt${files.length !== 1 ? 's' : ''}`}
