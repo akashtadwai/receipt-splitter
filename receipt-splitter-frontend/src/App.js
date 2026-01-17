@@ -15,7 +15,7 @@ function App() {
     // Multi-receipt state
     files, setFiles,
     imagePreviews, setImagePreviews,
-    receipts, setReceipts,
+    setReceipts,
     receiptData, setReceiptData,
 
     // Shared state
