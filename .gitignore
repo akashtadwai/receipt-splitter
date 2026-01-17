@@ -53,6 +53,8 @@ Backups/
 Cache/
 CachedData/
 Code Cache/
+User/
+logs/
 GPUCache/
 Local Storage/
 *.lock
