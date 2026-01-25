@@ -114,9 +114,20 @@ export default {
                 });
             }
 
-            // Convert file to base64
+            // Convert file to base64 using chunked approach (prevents stack overflow on large mobile images)
             const arrayBuffer = await file.arrayBuffer();
-            const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+            const bytes = new Uint8Array(arrayBuffer);
+
+            // Process in chunks to avoid "Maximum call stack size exceeded" on mobile
+            // The spread operator would create millions of arguments for large images
+            let binaryString = '';
+            const chunkSize = 8192; // Process 8KB at a time
+            for (let i = 0; i < bytes.length; i += chunkSize) {
+                const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
+                binaryString += String.fromCharCode.apply(null, chunk);
+            }
+            const base64 = btoa(binaryString);
+
             const mimeType = file.type || 'image/jpeg';
             const base64DataUrl = `data:${mimeType};base64,${base64}`;
 
