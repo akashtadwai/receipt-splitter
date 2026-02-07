@@ -132,7 +132,10 @@ describe('Worker Integration Tests', () => {
             const response = await worker.fetch(request, createEnv());
 
             expect(response.status).toBe(500);
-            expect(await response.json()).toEqual({ detail: 'Error processing receipt with AI' });
+            expect(await response.json()).toEqual({
+                detail: 'Error processing receipt with AI',
+                mistral_error: 'API Error'
+            });
         });
     });
 });
