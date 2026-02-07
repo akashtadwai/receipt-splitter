@@ -23,6 +23,26 @@ describe('ReceiptUpload', () => {
     beforeEach(() => {
         jest.clearAllMocks();
         URL.createObjectURL = jest.fn(() => 'mocked-url');
+        URL.revokeObjectURL = jest.fn();
+
+        // Mock canvas for image compression
+        HTMLCanvasElement.prototype.getContext = jest.fn(() => ({
+            drawImage: jest.fn()
+        }));
+        HTMLCanvasElement.prototype.toBlob = jest.fn((callback) => {
+            callback(new Blob(['compressed'], { type: 'image/jpeg' }));
+        });
+
+        // Mock Image for image loading
+        global.Image = class {
+            constructor() {
+                setTimeout(() => {
+                    this.width = 1000;
+                    this.height = 800;
+                    this.onload && this.onload();
+                }, 0);
+            }
+        };
     });
 
     it('renders upload button disabled when no files selected', () => {

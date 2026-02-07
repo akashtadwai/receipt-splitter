@@ -114,13 +114,6 @@ export default {
                 });
             }
 
-            // Log file details for debugging
-            console.log('File received:', {
-                name: file.name,
-                type: file.type,
-                size: file.size
-            });
-
             // Convert file to base64 using chunked approach (prevents stack overflow on large mobile images)
             const arrayBuffer = await file.arrayBuffer();
             const bytes = new Uint8Array(arrayBuffer);
@@ -161,12 +154,9 @@ export default {
 
             if (!mistralResponse.ok) {
                 const errorData = await mistralResponse.text();
-                console.error('Mistral API error:', mistralResponse.status, errorData);
-                // Return actual error for debugging
                 return new Response(JSON.stringify({
                     detail: 'Error processing receipt with AI',
-                    mistral_status: mistralResponse.status,
-                    mistral_error: errorData.substring(0, 500) // Limit error length
+                    mistral_error: errorData.substring(0, 200)
                 }), {
                     status: 500,
                     headers: { ...headers, 'Content-Type': 'application/json' },

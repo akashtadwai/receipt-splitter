@@ -1,6 +1,63 @@
 import React from 'react';
 import Constants from '../Constants';
 
+/**
+ * Compress an image file to reduce size and token usage with Mistral API.
+ * Resizes to max 1500px on longest side and converts to JPEG at 80% quality.
+ * @param {File} file - The original image file
+ * @returns {Promise<File>} - Compressed image as a new File object
+ */
+const compressImage = (file) => {
+    return new Promise((resolve, reject) => {
+        const maxDimension = 1500;
+        const quality = 0.8;
+
+        const img = new Image();
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+
+        img.onload = () => {
+            let { width, height } = img;
+
+            // Calculate new dimensions maintaining aspect ratio
+            if (width > maxDimension || height > maxDimension) {
+                if (width > height) {
+                    height = Math.round((height * maxDimension) / width);
+                    width = maxDimension;
+                } else {
+                    width = Math.round((width * maxDimension) / height);
+                    height = maxDimension;
+                }
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+            ctx.drawImage(img, 0, 0, width, height);
+
+            canvas.toBlob(
+                (blob) => {
+                    if (!blob) {
+                        reject(new Error('Failed to compress image'));
+                        return;
+                    }
+                    // Create a new File with the compressed blob
+                    const compressedFile = new File(
+                        [blob],
+                        file.name.replace(/\.[^.]+$/, '.jpg'),
+                        { type: 'image/jpeg' }
+                    );
+                    resolve(compressedFile);
+                },
+                'image/jpeg',
+                quality
+            );
+        };
+
+        img.onerror = () => reject(new Error('Failed to load image'));
+        img.src = URL.createObjectURL(file);
+    });
+};
+
 const ReceiptUpload = ({
     files, setFiles,
     imagePreviews, setImagePreviews,
@@ -57,6 +114,7 @@ const ReceiptUpload = ({
     };
 
     const processReceipts = async () => {
+
         if (files.length === 0) {
             setError('Please select at least one file');
             return;
@@ -70,8 +128,11 @@ const ReceiptUpload = ({
             const results = await Promise.all(
                 files.map(async (file, index) => {
                     try {
+                        // Compress image to reduce token usage and avoid rate limits
+                        const compressedFile = await compressImage(file);
+
                         const formData = new FormData();
-                        formData.append('file', file);
+                        formData.append('file', compressedFile);
 
                         const response = await fetch(`${API_URL}/process-receipt`, {
                             method: 'POST',
@@ -235,6 +296,8 @@ const ReceiptUpload = ({
             <div className="text-sm text-center text-gray-500 mt-2">
                 <p>Select multiple receipt images to split bills from different orders</p>
             </div>
+
+
         </div>
     );
 };
