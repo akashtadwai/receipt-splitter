@@ -80,9 +80,13 @@ const ReceiptUpload = ({
 
                         if (!response.ok) {
                             const errorData = await response.json();
+                            // Include Mistral error details if available
+                            const errorMsg = errorData.mistral_error
+                                ? `${errorData.detail} (Mistral: ${errorData.mistral_error})`
+                                : (errorData.detail || `Error processing ${file.name}`);
                             return {
                                 success: false,
-                                error: errorData.detail || `Error processing ${file.name}`,
+                                error: errorMsg,
                                 fileName: file.name,
                                 index
                             };
